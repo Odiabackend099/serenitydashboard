@@ -1,0 +1,77 @@
+{
+  "name": "Debug Webhook Receiver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "debug-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-debug",
+      "name": "Debug Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DEBUG: Check what data is actually received\nconsole.log('=== WEBHOOK DEBUG INFO ===');\nconsole.log('items[0].json:', JSON.stringify(items[0].json, null, 2));\nconsole.log('items[0]:', JSON.stringify(items[0], null, 2));\nconsole.log('Full items array:', JSON.stringify(items, null, 2));\n\n// Try different access methods\nconst method1 = items[0].json;\nconst method2 = $input.all()[0]?.json;\nconst method3 = $input.first().json;\n\nconsole.log('Method 1 (items[0].json):', method1);\nconsole.log('Method 2 ($input.all()[0]?.json):', method2);\nconsole.log('Method 3 ($input.first().json):', method3);\n\n// Return what we found\nreturn [{\n  json: {\n    method1: method1,\n    method2: method2,\n    method3: method3,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "debug-code",
+      "name": "Debug Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "debug-response",
+      "name": "Debug Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Debug Webhook": {
+      "main": [
+        [
+          {
+            "node": "Debug Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug Code": {
+      "main": [
+        [
+          {
+            "node": "Debug Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

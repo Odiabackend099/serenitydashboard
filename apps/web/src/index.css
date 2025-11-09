@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { 
+  height: 100%; 
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* FullCalendar Dark Mode Styling */
+.dark .fc {
+  --fc-border-color: #374151;
+  --fc-page-bg-color: #1F2937;
+  --fc-neutral-bg-color: #111827;
+  --fc-today-bg-color: rgba(59, 130, 246, 0.1);
+}
+
+.dark .fc .fc-col-header-cell {
+  background-color: #111827;
+  color: #E5E7EB;
+  border-color: #374151;
+}
+
+.dark .fc .fc-daygrid-day {
+  background-color: #1F2937;
+  color: #E5E7EB;
+}
+
+.dark .fc .fc-daygrid-day:hover {
+  background-color: #374151;
+}
+
+.dark .fc .fc-daygrid-day-number {
+  color: #D1D5DB;
+}
+
+.dark .fc .fc-day-today {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+.dark .fc .fc-toolbar-title {
+  color: #F3F4F6;
+}
+
+.dark .fc .fc-button {
+  background-color: #374151;
+  border-color: #4B5563;
+  color: #F3F4F6;
+}
+
+.dark .fc .fc-button:hover {
+  background-color: #4B5563;
+}
+
+.dark .fc .fc-button-active {
+  background-color: #0066CC !important;
+  border-color: #0066CC !important;
+}
