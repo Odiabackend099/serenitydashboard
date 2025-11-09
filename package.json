@@ -1,0 +1,23 @@
+{
+  "name": "serenity-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "concurrently -n WEB,API -c \"blue.bold,green.bold\" \"npm:dev -w apps/web\" \"npm:dev -w apps/api\"",
+    "build": "npm run build -w apps/web && npm run build -w apps/api",
+    "lint": "echo 'Add your linter setup in each app'",
+    "seed": "npm run seed -w apps/api"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "concurrently": "^9.0.0"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
+}

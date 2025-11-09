@@ -1,0 +1,9 @@
+name: Serenity Dashboard Rules
+rules:
+  - Use strict TypeScript in both web and api.
+  - Prefer zod for input validation.
+  - Keep PRs small and focused.
+  - Write tests first for new modules when feasible.
+  - Enforce RBAC in server routes and guard client navigation.
+  - Use consistent file naming: kebab-case for files, PascalCase for components.
+  - Avoid inline secrets; use env vars.

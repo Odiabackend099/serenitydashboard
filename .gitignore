@@ -1,0 +1,45 @@
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+*.env
+**/
+
+.env.local
+**/.env.production
+
+# Secrets and credentials
+**/secrets/
+**/*secret*
+**/*credential*
+.git-secrets-replace.txt
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Compiled JavaScript from TypeScript (keep only .ts/.tsx files)
+apps/web/src/**/*.js
+!apps/web/src/**/*.config.js
+!apps/web/src/**/*.setup.js
+
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+clean-git-history.sh
