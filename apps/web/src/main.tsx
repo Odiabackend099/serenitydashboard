@@ -1,6 +1,6 @@
-// Build version: 2.0.1 - 2025-11-12T18:30:00Z
+// Build version: 2.0.2 - 2025-11-12T19:50:00Z - Fixed API key
 import React from 'react';
-console.log('Serenity Care AI - Version 2.0.1 - Build 20251112-1830');
+console.log('Serenity Care AI - Version 2.0.2 - Build 20251112-1950 - API Key Fixed');
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
