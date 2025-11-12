@@ -193,9 +193,11 @@ serve(async (req) => {
 
             case 'trigger_automation': {
               const n8nWebhookBase = Deno.env.get('N8N_WEBHOOK_BASE');
-    if (!n8nWebhookBase) {
-      throw new Error('N8N_WEBHOOK_BASE not configured');
-    }
+              if (!n8nWebhookBase) {
+                logger.error('N8N_WEBHOOK_BASE environment variable not set');
+                throw new Error('N8N_WEBHOOK_BASE not configured');
+              }
+              logger.debug('Calling n8n webhook', { base: n8nWebhookBase, action: parsedArgs.action });
 
     const response = await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
                 method: 'POST',
