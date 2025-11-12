@@ -1,5 +1,6 @@
-// Build: 2025-11-12T18:05:00Z - Cache bust
+// Build version: 2.0.1 - 2025-11-12T18:30:00Z
 import React from 'react';
+console.log('Serenity Care AI - Version 2.0.1 - Build 20251112-1830');
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

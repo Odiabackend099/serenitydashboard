@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Frontend Test - Appointment Booking</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2563eb; margin-top: 0; }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .success { background: #d1fae5; color: #065f46; }
+        .error { background: #fee2e2; color: #991b1b; }
+        .info { background: #dbeafe; color: #1e3a8a; }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #1d4ed8; }
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .test-link {
+            display: inline-block;
+            margin: 20px 0;
+            padding: 15px 25px;
+            background: #10b981;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .test-link:hover { background: #059669; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎯 Production Frontend Test</h1>
+
+        <div class="status info">
+            <strong>Testing:</strong> https://srhbackend.odia.dev<br>
+            <strong>New Bundle:</strong> index--cvuqBpr.js<br>
+            <strong>Email:</strong> egualesamuel@gmail.com
+        </div>
+
+        <h2>Test Scenarios</h2>
+
+        <button onclick="testEdgeFunction()">1. Test Edge Function</button>
+        <button onclick="testAppointmentAPI()">2. Test Appointment API</button>
+        <button onclick="testFrontendBundle()">3. Test Frontend Bundle</button>
+
+        <div id="results"></div>
+
+        <hr style="margin: 30px 0;">
+
+        <h2>Manual Test</h2>
+        <p>Open the production site and test the chat widget:</p>
+        <a href="https://srhbackend.odia.dev" target="_blank" class="test-link">
+            🚀 Open Production Site
+        </a>
+
+        <div class="status info">
+            <strong>Test Steps:</strong><br>
+            1. Open the link above<br>
+            2. Click the chat widget (bottom right)<br>
+            3. Type: "I need to book an appointment"<br>
+            4. Verify AI asks for: name, email, phone, date, time, reason<br>
+            5. Provide all details<br>
+            6. Confirm booking succeeds and email is sent
+        </div>
+    </div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+
+        function showResult(title, status, message, data) {
+            const statusClass = status === 'success' ? 'success' : status === 'error' ? 'error' : 'info';
+            const html = `
+                <div class="status ${statusClass}">
+                    <strong>${title}:</strong> ${message}
+                    ${data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : ''}
+                </div>
+            `;
+            resultsDiv.innerHTML += html;
+        }
+
+        async function testEdgeFunction() {
+            resultsDiv.innerHTML = '';
+            showResult('Test 1', 'info', 'Testing Groq Edge Function...', null);
+
+            try {
+                const response = await fetch('https://yfrpxqvjshwaaomgcaoq.supabase.co/functions/v1/groq-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{role: 'user', content: 'Hello, test message'}],
+                        model: 'llama-3.1-8b-instant',
+                        max_tokens: 20
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.choices && data.choices[0].message.content) {
+                    showResult('Test 1', 'success', 'Edge Function is working!', {
+                        response: data.choices[0].message.content
+                    });
+                } else {
+                    showResult('Test 1', 'error', 'Unexpected response format', data);
+                }
+            } catch (error) {
+                showResult('Test 1', 'error', 'Edge Function test failed', {error: error.message});
+            }
+        }
+
+        async function testAppointmentAPI() {
+            resultsDiv.innerHTML = '';
+            showResult('Test 2', 'info', 'Testing appointment booking API...', null);
+
+            try {
+                const response = await fetch('https://yfrpxqvjshwaaomgcaoq.supabase.co/functions/v1/groq-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{
+                            role: 'user',
+                            content: 'Book appointment for tomorrow at 2pm. Name: Test User, Email: egualesamuel@gmail.com, Phone: +1-555-0123, Reason: checkup'
+                        }],
+                        model: 'llama-3.1-8b-instant',
+                        tools: [{
+                            type: 'function',
+                            function: {
+                                name: 'book_appointment_with_confirmation',
+                                description: 'Book appointment',
+                                parameters: {
+                                    type: 'object',
+                                    properties: {
+                                        name: {type: 'string'},
+                                        email: {type: 'string'},
+                                        phone: {type: 'string'},
+                                        date: {type: 'string'},
+                                        time: {type: 'string'},
+                                        reason: {type: 'string'}
+                                    },
+                                    required: ['name', 'email', 'phone', 'date', 'time', 'reason']
+                                }
+                            }
+                        }],
+                        max_tokens: 1000
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.choices && data.choices[0].message.tool_calls) {
+                    showResult('Test 2', 'success', 'AI called booking tool!', {
+                        tool_call: data.choices[0].message.tool_calls[0]
+                    });
+                } else if (data.tool_results) {
+                    showResult('Test 2', 'success', 'Booking completed!', {
+                        result: data.tool_results[0]
+                    });
+                } else {
+                    showResult('Test 2', 'info', 'AI response (may ask for more info)', {
+                        response: data.choices[0].message.content
+                    });
+                }
+            } catch (error) {
+                showResult('Test 2', 'error', 'Appointment test failed', {error: error.message});
+            }
+        }
+
+        async function testFrontendBundle() {
+            resultsDiv.innerHTML = '';
+            showResult('Test 3', 'info', 'Checking production bundle...', null);
+
+            try {
+                const response = await fetch('https://srhbackend.odia.dev');
+                const html = await response.text();
+
+                const bundleMatch = html.match(/index-[a-zA-Z0-9_-]*\.js/);
+                const currentBundle = bundleMatch ? bundleMatch[0] : 'not found';
+                const expectedBundle = 'index--cvuqBpr.js';
+
+                if (currentBundle === expectedBundle) {
+                    showResult('Test 3', 'success', 'Production serving latest bundle!', {
+                        bundle: currentBundle,
+                        status: 'LATEST VERSION DEPLOYED ✓'
+                    });
+                } else {
+                    showResult('Test 3', 'error', 'Bundle mismatch - may need hard refresh', {
+                        expected: expectedBundle,
+                        actual: currentBundle,
+                        action: 'Try: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)'
+                    });
+                }
+            } catch (error) {
+                showResult('Test 3', 'error', 'Frontend test failed', {error: error.message});
+            }
+        }
+    </script>
+</body>
+</html>
