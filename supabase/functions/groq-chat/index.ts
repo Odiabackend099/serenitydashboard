@@ -212,7 +212,20 @@ serve(async (req) => {
                 throw new Error(`n8n automation failed: ${response.statusText}`);
               }
 
-              result = await response.json();
+              // Handle empty response from n8n webhook
+              const responseText = await response.text();
+              if (responseText && responseText.trim().length > 0) {
+                try {
+                  result = JSON.parse(responseText);
+                } catch (e) {
+                  logger.warn('n8n returned non-JSON response', { response: responseText.substring(0, 100) });
+                  result = { success: true, message: 'Automation triggered successfully' };
+                }
+              } else {
+                // Empty response = success
+                logger.info('n8n webhook executed successfully (empty response)');
+                result = { success: true, message: 'Automation triggered successfully' };
+              }
               break;
             }
 

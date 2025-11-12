@@ -1,2 +1,8 @@
 [functions.groq-chat]
 verify_jwt = false
+
+[functions.vapi-webhook]
+verify_jwt = false
+
+[functions.twilio-whatsapp-webhook]
+verify_jwt = false
