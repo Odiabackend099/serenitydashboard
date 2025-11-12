@@ -58,9 +58,10 @@ serve(async (req) => {
     const authHeader = req.headers.get('authorization');
     const isAuthenticated = authHeader && authHeader.startsWith('Bearer ');
 
-    // Check if request contains admin-only tools (get_stats, trigger_automation)
+    // Check if request contains admin-only tools (only get_stats is admin-only)
+    // Note: trigger_automation is now public for appointment booking
     const hasAdminTools = tools && tools.some((tool: any) =>
-      ['get_stats', 'trigger_automation'].includes(tool.function?.name)
+      ['get_stats'].includes(tool.function?.name)
     );
 
     if (hasAdminTools && !isAuthenticated) {
