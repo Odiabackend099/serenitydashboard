@@ -688,7 +688,7 @@ export const publicTools = [
             description: 'Reason for appointment',
           },
         },
-        required: ['name', 'email', 'phone', 'date', 'time', 'reason'],
+        required: ['name', 'email', 'date', 'time'],
       },
     },
   },
