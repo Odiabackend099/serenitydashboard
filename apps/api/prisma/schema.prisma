@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model users {
+  id     String @id @default(cuid())
+  name   String
+  email  String  @unique
+  hash   String
+  role   String
+  active Boolean @default(true)
+  audit_logs audit_logs[]
+}
+
+model conversations {
+  id         String  @id @default(cuid())
+  channel    String
+  patientRef String
+  status     String
+  messages   messages[]
+}
+
+model messages {
+  id             String  @id @default(cuid())
+  conversationId String
+  from           String
+  body           String
+  mediaUrl       String?
+  ts             DateTime @default(now())
+  conversation   conversations @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model appointments {
+  id         String  @id @default(cuid())
+  patientRef String
+  start      DateTime
+  end        DateTime
+  doctor     String
+  source     String
+  status     String
+}
+
+model agents {
+  id           String  @id @default(cuid())
+  name         String
+  systemPrompt String
+  voiceId      String?
+  faqJson      Json?
+  createdBy    String
+}
+
+model audit_logs {
+  id      String   @id @default(cuid())
+  actorId String
+  action  String
+  metaJson Json?
+  ts      DateTime @default(now())
+  user    users?   @relation(fields: [actorId], references: [id])
+}

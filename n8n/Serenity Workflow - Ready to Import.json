@@ -1,0 +1,730 @@
+{
+  "name": "Serenity Workflow - Ready to Import",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "serenity-webhook-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "66394708-393c-45d5-829c-580539204e3d",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -992,
+        560
+      ],
+      "webhookId": "serenity-webhook-v2"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "a1b2c3d4",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "send_whatsapp",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send_whatsapp"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "b2c3d4e5",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "send_sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send_sms"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "c3d4e5f6",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "send_email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send_email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "d4e5f6g7",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "send_message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send_message"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "e5f6g7h8",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "book_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "book_appointment"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d5d56a17-edea-4b57-9cf7-58dda16c5c19",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -720,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "from": "+12526453035",
+        "to": "={{ $json.body.phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $json.body.message }}",
+        "options": {}
+      },
+      "id": "1937e919-80c1-4f64-b483-9fb12779512e",
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        256
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "02zpRP0MwCAn6kJr",
+          "name": "serenity"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "+12526453035",
+        "to": "={{ $json.body.phone }}",
+        "message": "={{ $json.body.message }}",
+        "options": {}
+      },
+      "id": "61d4b0df-6cde-4dac-b3eb-59bb15df9d57",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        384
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "02zpRP0MwCAn6kJr",
+          "name": "serenity"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.body.email }}",
+        "subject": "={{ $json.body.subject || 'Message from Serenity Hospital' }}",
+        "message": "={{ $json.body.message }}",
+        "options": {}
+      },
+      "id": "78a1f833-448d-43b9-a681-173cbbde5b0a",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -400,
+        496
+      ],
+      "webhookId": "f6a91ca9-4b12-4398-86ff-4c71a21f1a89",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jX0WB96gvVFRE5qW",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "f6g7h8i9",
+                    "leftValue": "={{ $json.body.channel }}",
+                    "rightValue": "whatsapp",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "whatsapp"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "id": "g7h8i9j0",
+                    "leftValue": "={{ $json.body.channel }}",
+                    "rightValue": "sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sms"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2939341b-ffb4-4126-b63c-242e18c1f58f",
+      "name": "Route by Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -368,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "from": "+12526453035",
+        "to": "={{ $json.body.phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $json.body.message }}",
+        "options": {}
+      },
+      "id": "0cd52a54-9173-4e43-a541-ff7798e55072",
+      "name": "Send via WhatsApp",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        528
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "02zpRP0MwCAn6kJr",
+          "name": "serenity"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "+12526453035",
+        "to": "={{ $json.body.phone }}",
+        "message": "={{ $json.body.message }}",
+        "options": {}
+      },
+      "id": "1a1fd76a-e897-4bdd-b579-e41a4028acd4",
+      "name": "Send via SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        688
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "02zpRP0MwCAn6kJr",
+          "name": "serenity"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "messages",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_id",
+              "fieldValue": "={{ $json.body.conversation_id }}"
+            },
+            {
+              "fieldId": "body",
+              "fieldValue": "={{ $json.body.message }}"
+            },
+            {
+              "fieldId": "from_type",
+              "fieldValue": "ai"
+            }
+          ]
+        }
+      },
+      "id": "4cf3665b-736f-4e1a-909b-93e93dbe5b2a",
+      "name": "Save to Database",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        224,
+        576
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "7ljtqTelzpKvg146",
+          "name": "srh"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "appointments",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_id",
+              "fieldValue": "={{ $json.body.conversation_id || $json.body.body.conversation_id || $json.conversation_id }}"
+            },
+            {
+              "fieldId": "patient_ref",
+              "fieldValue": "={{ $json.body.patient_ref || $json.body.body.patient_ref || $json.body.patient_email || $json.body.body.patient_email || $json.body.email || $json.body.body.email || $json.patient_ref || $json.patient_email || $json.email }}"
+            },
+            {
+              "fieldId": "patient_name",
+              "fieldValue": "={{ $json.body.patient_name || $json.body.body.patient_name || $json.body.patientName || $json.body.body.patientName || $json.body.name || $json.body.body.name }}"
+            },
+            {
+              "fieldId": "patient_email",
+              "fieldValue": "={{ $json.body.patient_email || $json.body.body.patient_email || $json.body.patientEmail || $json.body.body.patientEmail || $json.body.email || $json.body.body.email }}"
+            },
+            {
+              "fieldId": "patient_phone",
+              "fieldValue": "={{ $json.body.patient_phone || $json.body.body.patient_phone || $json.body.patientPhone || $json.body.body.patientPhone || $json.body.phone || $json.body.body.phone }}"
+            },
+            {
+              "fieldId": "appointment_date",
+              "fieldValue": "={{ $json.body.appointment_date || $json.body.body.appointment_date || $json.body.appointmentDate || $json.body.body.appointmentDate || $json.body.date || $json.body.body.date }}"
+            },
+            {
+              "fieldId": "appointment_time",
+              "fieldValue": "={{ $json.body.appointment_time || $json.body.body.appointment_time || $json.body.appointmentTime || $json.body.body.appointmentTime || $json.body.time || $json.body.body.time }}"
+            },
+            {
+              "fieldId": "appointment_type",
+              "fieldValue": "={{ $json.body.appointment_type || 'consultation' }}"
+            },
+            {
+              "fieldId": "reason",
+              "fieldValue": "={{ $json.body.reason || $json.body.body.reason || $json.body.appointmentReason || $json.body.body.appointmentReason || 'General consultation' }}"
+            }
+          ]
+        }
+      },
+      "id": "8357b18e-9325-4136-9682-b1550766d1f4",
+      "name": "Create Appointment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        848
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "7ljtqTelzpKvg146",
+          "name": "srh"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "+12526453035",
+        "to": "={{ $json.patient_phone }}",
+        "message": "=Appointment confirmed for {{ $json.appointment_date }} at {{ $json.appointment_time }}. Serenity Hospital.",
+        "options": {}
+      },
+      "id": "4dc5bed7-c6bf-4b8c-ac93-fd7c5e28e936",
+      "name": "Send Appointment SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        -96,
+        832
+      ],
+      "credentials": {
+        "twilioApi": {
+          "id": "02zpRP0MwCAn6kJr",
+          "name": "serenity"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.patient_email || 'noreply@example.com' }}",
+        "subject": "Appointment Confirmation - Serenity Hospital",
+        "message": "=Dear {{ $json.patient_name || 'Patient' }},\n\nYour appointment has been confirmed:\n\nDate: {{ $json.appointment_date }}\nTime: {{ $json.appointment_time }}\nReason: {{ $json.reason || 'General consultation' }}\n\nPlease arrive 10 minutes early.\n\nBest regards,\nSerenity Royale Hospital",
+        "options": {}
+      },
+      "id": "3bb8ab97-e2cc-47ad-bcdc-91f779c07daf",
+      "name": "Send Appointment Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        960
+      ],
+      "webhookId": "0ef81628-e84b-4717-8094-84720e9ad2d5",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jX0WB96gvVFRE5qW",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, action: $json.body.action, timestamp: new Date().toISOString() } }}",
+        "options": {}
+      },
+      "id": "a15d9706-dfac-4a8b-9b15-2223324c6816",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        592,
+        480
+      ]
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "headers": {
+            "host": "cwai97.app.n8n.cloud",
+            "user-agent": "Deno/2.1.4 (variant; SupabaseEdgeRuntime/1.69.22)",
+            "content-length": "880",
+            "accept": "*/*",
+            "accept-encoding": "gzip, br",
+            "accept-language": "*",
+            "cdn-loop": "cloudflare; loops=1; subreqs=1",
+            "cf-connecting-ip": "2a05:d01c:76e:7901:6009:f4f:987a:27e8",
+            "cf-ew-via": "15",
+            "cf-ipcountry": "GB",
+            "cf-ray": "99d248ca954e4f42-LHR",
+            "cf-visitor": "{\"scheme\":\"https\"}",
+            "cf-worker": "n8n.cloud",
+            "content-type": "application/json",
+            "x-forwarded-for": "2a05:d01c:76e:7901:6009:f4f:987a:27e8, 172.64.192.150",
+            "x-forwarded-host": "cwai97.app.n8n.cloud",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik-prod-users-gwc-89-8567ddc79c-gsljl",
+            "x-is-trusted": "yes",
+            "x-real-ip": "2a05:d01c:76e:7901:6009:f4f:987a:27e8"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "action": "book_appointment",
+            "body": {
+              "action": "book_appointment",
+              "channel": "webchat",
+              "toList": "egiualesamuel@gmail.com",
+              "subject": "Appointment Confirmation - 2024-03-12 at 02:00 PM",
+              "message": "Dear Samuel Eguale,\n\nYour appointment has been confirmed!\n\n📅 Date: 2024-03-12\n🕐 Time: 02:00 PM\n📋 Reason: unknown\n\nPlease arrive 10 minutes early.\n\nBest regards,\nSerenity Hospital Team",
+              "patient_ref": "egiualesamuel@gmail.com",
+              "patient_name": "Samuel Eguale",
+              "patientName": "Samuel Eguale",
+              "patient_email": "egiualesamuel@gmail.com",
+              "patientEmail": "egiualesamuel@gmail.com",
+              "patient_phone": "+1234567890",
+              "patientPhone": "+1234567890",
+              "appointment_date": "2024-03-12",
+              "appointmentDate": "2024-03-12",
+              "appointment_time": "02:00 PM",
+              "appointmentTime": "02:00 PM",
+              "reason": "unknown",
+              "appointmentReason": "unknown",
+              "source": "groq_chat_widget",
+              "timestamp": "2025-11-12T01:33:58.741Z"
+            }
+          },
+          "webhookUrl": "https://cwai97.app.n8n.cloud/webhook/serenity-webhook-v2",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route by Channel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Channel": {
+      "main": [
+        [
+          {
+            "node": "Send via WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send via SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Save to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via SMS": {
+      "main": [
+        [
+          {
+            "node": "Save to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Database": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Appointment": {
+      "main": [
+        [
+          {
+            "node": "Send Appointment SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Appointment Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Appointment SMS": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Appointment Email": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "509244af-d764-494c-b5e8-e8692ab354f6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "608c81b18f4cae0261555234853022f89dd9b2a792f403581a4b93c4da12a2a0"
+  },
+  "id": "UZvAy2tTj8fPWcDZ",
+  "tags": []
+}

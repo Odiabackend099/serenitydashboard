@@ -1,45 +1,360 @@
-# Environment files
-.env
-.env.local
-.env.production
-.env.development
-.env.*.local
-*.env
-**/
+# ============================================================================
+# SERENITY CARE AI - GIT IGNORE CONFIGURATION
+# ============================================================================
+# Optimized for modern web development with React, Node.js, and Supabase
+# Last updated: November 12, 2025
+# ============================================================================
 
-.env.local
-**/.env.production
+# ============================================================================
+# DEPENDENCIES
+# ============================================================================
+node_modules/
+/.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
 
-# Secrets and credentials
-**/secrets/
-**/*secret*
-**/*credential*
-.git-secrets-replace.txt
-
-# Build outputs
+# ============================================================================
+# PRODUCTION BUILD OUTPUT
+# ============================================================================
 dist/
 build/
+.next/
+out/
+.vercel/output/
+
+# Apps-specific build outputs
+apps/web/dist/
+apps/api/dist/
+packages/*/dist/
+
+# ============================================================================
+# ENVIRONMENT VARIABLES & SECRETS
+# ============================================================================
+# CRITICAL: Never commit these files
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+
+# Backup environment files (created by scripts)
+.env.bak
+.env.backup
+
+# Secrets management
+secrets/
+*.key
+*.pem
+*.crt
+
+# ============================================================================
+# LOGS
+# ============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime logs
+logs/
 *.log
 
-# Compiled JavaScript from TypeScript (keep only .ts/.tsx files)
-apps/web/src/**/*.js
-!apps/web/src/**/*.config.js
-!apps/web/src/**/*.setup.js
+# ============================================================================
+# SUPABASE
+# ============================================================================
+.supabase/
 
-# Dependencies
-node_modules/
+# Supabase local development
+supabase/.branches/
+supabase/.temp/
 
-# IDE
-.vscode/
+# Keep migrations and functions
+!supabase/migrations/
+!supabase/functions/
+
+# ============================================================================
+# VERCEL
+# ============================================================================
+.vercel
+.vercel/
+*.vercel.json.backup
+
+# ============================================================================
+# TESTING
+# ============================================================================
+coverage/
+*.lcov
+.nyc_output/
+
+# Jest
+jest-coverage/
+jest_*/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ============================================================================
+# IDE & EDITOR
+# ============================================================================
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (WebStorm, IntelliJ, etc.)
 .idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
 *.swp
 *.swo
+*~
+.vim/
 
-# OS
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================================================
+# OPERATING SYSTEM
+# ============================================================================
+
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
-# Temporary files
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
+tmp/
+temp/
 *.tmp
 *.temp
-clean-git-history.sh
+.cache/
+.parcel-cache/
+
+# ============================================================================
+# DATABASE
+# ============================================================================
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Prisma
+prisma/.env
+prisma/migrations/**/migration.sql.bak
+
+# ============================================================================
+# DOCKER
+# ============================================================================
+docker-compose.override.yml
+.dockerignore.bak
+
+# ============================================================================
+# BACKUP FILES
+# ============================================================================
+*.backup
+*.bak
+*.orig
+*.old
+
+# Markdown backups (created by our scripts)
+*.md.backup
+
+# ============================================================================
+# PACKAGE MANAGER LOCK FILES (Keep npm, ignore others)
+# ============================================================================
+# Keep package-lock.json for npm
+!package-lock.json
+
+# Ignore other package managers
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# ============================================================================
+# BUILD TOOLS
+# ============================================================================
+.turbo/
+.swc/
+.rollup.cache/
+
+# Vite
+vite.config.*.timestamp-*
+
+# ============================================================================
+# SERVERLESS
+# ============================================================================
+.serverless/
+.webpack/
+
+# ============================================================================
+# MISC
+# ============================================================================
+.env.example.backup
+.eslintcache
+.stylelintcache
+.prettier-cache
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Optional npm cache directory
+.npm/
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# ============================================================================
+# PROJECT-SPECIFIC
+# ============================================================================
+
+# Test output files
+test-results.json
+test-output/
+
+# Generated types (regenerate with: supabase gen types)
+# Comment out if you want to commit generated types
+# apps/web/src/lib/database.types.ts
+
+# Transpiled JS files from TypeScript (keep only .ts/.tsx source)
+apps/web/src/**/*.js
+apps/web/src/**/*.jsx
+!apps/web/src/**/*.config.js
+!apps/web/src/**/*.test.js
+
+# PWA generated files
+apps/web/dev-dist/
+apps/web/sw.js
+apps/web/workbox-*.js
+
+# ============================================================================
+# DOCUMENTATION BACKUPS
+# ============================================================================
+# Keep main docs, ignore backups
+docs/*.backup
+*.md.bak
+
+# ============================================================================
+# SECURITY
+# ============================================================================
+# Security audit reports (may contain sensitive info)
+security-audit/
+audit-reports/
+
+# ============================================================================
+# ANALYTICS & MONITORING
+# ============================================================================
+.lighthouseci/
+lighthouse-report.html
+
+# ============================================================================
+# AI & ML
+# ============================================================================
+# Model files (if you add local AI models)
+*.model
+*.weights
+*.h5
+
+# ============================================================================
+# CUSTOM IGNORE PATTERNS
+# ============================================================================
+# Add your project-specific patterns below
+
+# n8n local exports (keep version-controlled workflow)
+# n8n/exports/
+
+# Local test data
+test-data/local/
+
+# Local scripts (personal automation)
+scripts/local/
+
+# Archive directory (old documentation and files)
+archive/
+
+# Cleanup script (temporary)
+cleanup-project.sh
+
+# ============================================================================
+# ALWAYS INCLUDE (Override previous rules)
+# ============================================================================
+# Important: Use ! to force-include certain files
+!.gitkeep
+!.env.example
+!README.md
+!LICENSE
+
+# ============================================================================
+# END OF .gitignore
+# ============================================================================

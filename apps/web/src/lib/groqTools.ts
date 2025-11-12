@@ -13,6 +13,45 @@
 import { supabase } from './supabase';
 import { logger } from './logger';
 
+// Input validation functions
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  return emailRegex.test(email) && email.length <= 254;
+}
+
+function validatePhone(phone: string): boolean {
+  // Accept international format with +, or US format with/without country code
+  const phoneRegex = /^(\+?1[-.\s]?)?(\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4})$/;
+  return phoneRegex.test(phone.replace(/\s/g, ''));
+}
+
+function sanitizeInput(input: string): string {
+  if (typeof input !== 'string') return '';
+  return input.replace(/[<>]/g, '').trim();
+}
+
+function validateAppointmentDate(dateString: string): boolean {
+  const appointmentDate = new Date(dateString);
+  const now = new Date();
+  
+  // Check if date is valid
+  if (isNaN(appointmentDate.getTime())) {
+    return false;
+  }
+  
+  // Check if date is in the future (allow same day but future time)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const appointmentDay = new Date(appointmentDate.getFullYear(), appointmentDate.getMonth(), appointmentDate.getDate());
+  
+  return appointmentDay >= today;
+}
+
+function validateTimeFormat(timeString: string): boolean {
+  // Accept HH:MM format (24-hour) or HH:MM:SS format
+  const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/;
+  return timeRegex.test(timeString);
+}
+
 // Get Supabase URL for Edge Function
 const getSupabaseUrl = (): string => {
   const url = import.meta.env.VITE_SUPABASE_URL;
@@ -638,11 +677,11 @@ export const publicTools = [
           },
           date: {
             type: 'string',
-            description: 'Appointment date (e.g., "2024-01-15")',
+            description: 'Appointment date in YYYY-MM-DD format (e.g., "2025-11-15"). For "tomorrow", calculate the actual date. Today is ' + new Date().toISOString().split('T')[0],
           },
           time: {
             type: 'string',
-            description: 'Appointment time (e.g., "2:30 PM")',
+            description: 'Appointment time in 12-hour format with AM/PM (e.g., "2:30 PM")',
           },
           reason: {
             type: 'string',
@@ -1894,6 +1933,47 @@ export async function chatWithTools(
   toolsToUse: any[] = adminTools, // Tools to make available
   systemPromptOverride?: string // Optional custom system prompt
 ): Promise<string> {
+  const MAX_RETRIES = 3;
+  let retryCount = 0;
+  
+  while (retryCount < MAX_RETRIES) {
+    try {
+      return await executeChatWithTools(messages, onToolCall, toolsToUse, systemPromptOverride);
+    } catch (error: any) {
+      retryCount++;
+      
+      // Don't retry authentication errors
+      if (error.message?.includes('Authentication failed')) {
+        throw error;
+      }
+      
+      // Don't retry permission errors
+      if (error.message?.includes('permission')) {
+        throw error;
+      }
+      
+      // Log retry attempt
+      logger.warn(`Chat request failed (attempt ${retryCount}/${MAX_RETRIES}):`, error.message);
+      
+      if (retryCount >= MAX_RETRIES) {
+        logger.error('Max retries reached, throwing error');
+        throw error;
+      }
+      
+      // Wait before retry (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+    }
+  }
+  
+  throw new Error('Unexpected error in retry loop');
+}
+
+async function executeChatWithTools(
+  messages: Array<{ role: string; content: string }>,
+  onToolCall?: (toolName: string, args: any) => Promise<boolean>,
+  toolsToUse: any[] = adminTools,
+  systemPromptOverride?: string
+): Promise<string> {
   const defaultSystemPrompt = `You are a helpful medical assistant for Serenity Royale Hospital.
 You can view statistics and trigger automations via approved tools.
 Always be professional, HIPAA-compliant, and ask for confirmation before sensitive actions.
@@ -1912,19 +1992,34 @@ If asked about patient data you don't have access to, politely explain you can o
   // Get auth token for Edge Function
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
+  
+  // Log authentication status for debugging
+  if (!authToken) {
+    logger.warn('No authentication token found - using anonymous access');
+  } else {
+    logger.log('Using authenticated session for groq-chat request');
+  }
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
 
     // Call Groq via Edge Function
     const edgeFunctionUrl = `${supabaseUrl}/functions/v1/groq-chat`;
+    
+    // Prepare headers with authentication
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+    };
+    
+    // Only add Authorization header if we have a valid token
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': authToken ? `Bearer ${authToken}` : '',
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-      },
+      headers,
       body: JSON.stringify({
         messages: fullMessages,
         model: 'llama-3.1-8b-instant',
@@ -1938,7 +2033,19 @@ If asked about patient data you don't have access to, politely explain you can o
     if (!response.ok) {
       const error = await response.text();
       logger.error('Groq Edge Function error:', error);
-      throw new Error(`Groq Edge Function error: ${response.status} ${error}`);
+      
+      // Provide user-friendly error messages based on status codes
+      if (response.status === 401) {
+        throw new Error('Authentication failed. Please log in again or contact support if the issue persists.');
+      } else if (response.status === 403) {
+        throw new Error('You do not have permission to perform this action. Please contact an administrator.');
+      } else if (response.status === 404) {
+        throw new Error('The requested service is temporarily unavailable. Please try again later.');
+      } else if (response.status >= 500) {
+        throw new Error('Server error. Our team has been notified. Please try again in a few minutes.');
+      } else {
+        throw new Error(`Service error: ${response.status}. Please try again or contact support.`);
+      }
     }
 
     const completion = await validateJsonResponse(response);

@@ -7,8 +7,11 @@
 // Allowed origins - ONLY these domains can make requests
 const ALLOWED_ORIGINS = [
   'https://srhaiadmin.odia.dev',
+  'https://srhbackend.odia.dev',
   'https://web-llswgxr6b-odia-backends-projects.vercel.app',
   'http://localhost:5173',  // Development
+  'http://localhost:5174',  // Development (current port)
+  'http://localhost:5175',  // Development (alternative port)
   'http://localhost:4173',  // Preview
 ];
 
