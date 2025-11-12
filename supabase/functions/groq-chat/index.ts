@@ -101,7 +101,7 @@ serve(async (req) => {
     if (!groqResponse.ok) {
       const errorText = await groqResponse.text();
       logger.error('Groq API error', { status: groqResponse.status, error: errorText.substring(0, 100) });
-      throw new Error(`Groq API error: ${groqResponse.status}`);
+      throw new Error(`Groq API error ${groqResponse.status}: ${errorText.substring(0, 200)}`);
     }
 
     const groqData = await groqResponse.json();
