@@ -1,3 +1,4 @@
+// Build: 2025-11-12T18:05:00Z - Cache bust
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
