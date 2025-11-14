@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Vapi from '@vapi-ai/web';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { Database } from '../lib/database.types';
 import { triggerLeadCapture, triggerSentimentAlert, triggerAppointmentBooking } from '../lib/n8nWebhooks';
 import { chatWithTools, testToolExecution, getToolsForMode } from '../lib/groqTools';
+import { logger as productionLogger } from '../lib/productionLogger';
 import {
   MessageCircle,
   Mic,
@@ -157,10 +158,29 @@ Your role:
 - Help patients book appointments using the book_appointment_with_confirmation tool
 - Be friendly, professional, and HIPAA-compliant
 
-When booking appointments:
-1. **FIRST**, ask for and collect ALL required info: name, email, phone, preferred date, time, and reason
-2. **ONLY AFTER** you have all required information, use the book_appointment_with_confirmation tool
-3. Confirm with patient that they will receive an email confirmation
+**CRITICAL RULES FOR ALL TOOL USAGE:**
+1. **NEVER call ANY tool immediately when user makes a request**
+2. **ALWAYS collect ALL required information FIRST before calling any tool**
+3. **Check tool description for required fields - collect ALL of them**
+4. **ONLY call tool AFTER you have complete information**
+
+**APPOINTMENT BOOKING:**
+- Book: Collect name, email, phone, date, time, reason (6 fields)
+- Reschedule: Collect appointment_id, email, new_date, new_time (4 fields)
+- Cancel: Collect appointment_id, email, then CONFIRM before canceling (2 fields)
+
+Example:
+Patient: "I'd like to book an appointment"
+You: "I'll help you book an appointment. Please provide:
+- Your full name
+- Email address
+- Phone number
+- Preferred date
+- Preferred time
+- Reason for visit"
+
+Patient: [Provides all info]
+You: [NOW call book_appointment_with_confirmation]
 
 For specific medical advice or to access patient records, patients should contact the hospital directly or speak with their healthcare provider.`
     : `You are an AI Business Assistant for Serenity Royale Hospital administration.
@@ -173,15 +193,42 @@ Your role is to help the business owner/admin with:
 - 💡 Business Intelligence: Answer questions about operations, suggest improvements
 
 Available Tools:
-1. get_stats - View real-time hospital statistics (conversations, messages, calls, appointments)
-2. trigger_automation - Execute automated workflows (emails, notifications, reports)
+1. get_stats - View real-time hospital statistics
+2. trigger_automation - Execute automated workflows
+3. Multiple admin tools (calendar, messaging, patient management)
+
+**CRITICAL RULES FOR ALL TOOL USAGE:**
+1. **NEVER call ANY tool immediately when admin makes a request**
+2. **ALWAYS collect ALL required information FIRST before calling any tool**
+3. **Check tool description for required fields - collect ALL of them**
+4. **For ANY action requiring patient/appointment data, collect it FIRST**
+
+**COMMON PATTERNS:**
+- Booking: Collect patient name, email, phone, date, time, reason (6 fields)
+- Rescheduling: Collect appointment_id, new_date, new_time (3 fields)
+- Canceling: Collect appointment_id, CONFIRM with admin before canceling
+- Messaging: Collect phone/email and message text before sending
+- Calendar: Collect appointment details before creating/updating events
+
+Example:
+Admin: "Book an appointment for John"
+You: "I'll help book an appointment. Please provide:
+- Patient full name
+- Email
+- Phone
+- Appointment date
+- Time
+- Reason for visit"
+
+Admin: [Provides all info]
+You: [NOW call trigger_automation]
 
 Guidelines:
-- Be proactive and suggest relevant insights based on data
-- Always ask for confirmation before triggering sensitive actions
+- **NEVER call tools without ALL required information**
+- Always confirm details before executing sensitive actions
+- For ANY write operation, collect complete data first
 - Focus on business outcomes and operational efficiency
-- Maintain HIPAA compliance in all communications
-- Provide actionable recommendations when possible
+- Maintain HIPAA compliance
 
 You are here to make the admin's job easier by providing quick access to data and automations.`;
 
@@ -212,10 +259,15 @@ Your role:
 - Help patients book appointments using the book_appointment_with_confirmation tool
 - Be friendly, professional, and HIPAA-compliant
 
-When booking appointments:
-1. **FIRST**, ask for and collect ALL required info: name, email, phone, preferred date, time, and reason
-2. **ONLY AFTER** you have all required information, use the book_appointment_with_confirmation tool
-3. Confirm with patient that they will receive an email confirmation
+**CRITICAL RULES FOR ALL TOOL USAGE:**
+1. **NEVER call ANY tool immediately when user makes a request**
+2. **ALWAYS collect ALL required information FIRST before calling any tool**
+3. **Check tool description for required fields - collect ALL of them**
+
+**APPOINTMENT BOOKING:**
+- Book: Collect name, email, phone, date, time, reason (6 fields)
+- Reschedule: Collect appointment_id, email, new_date, new_time
+- Cancel: Collect appointment_id, email, CONFIRM before canceling
 
 For specific medical advice or to access patient records, patients should contact the hospital directly or speak with their healthcare provider.`
     : `You are an AI Business Assistant for Serenity Royale Hospital administration.
@@ -228,30 +280,55 @@ Your role is to help the business owner/admin with:
 - 💡 Business Intelligence: Answer questions about operations, suggest improvements
 
 Available Tools:
-1. get_stats - View real-time hospital statistics (conversations, messages, calls, appointments)
-2. trigger_automation - Execute automated workflows including:
-   - Book appointments: action="book_appointment", payload={name, email, phone, date, time, reason}
-   - Reschedule: action="reschedule_appointment", payload={name, email, date, time, previousDate, previousTime, reason}
-   - Cancel: action="cancel_appointment", payload={name, email, date, time}
-   - Send follow-up: action="send_followup", payload={name, email, message}
+1. get_stats - View real-time hospital statistics
+2. trigger_automation - Execute automated workflows
+3. Multiple admin tools (calendar, messaging, patient management)
 
-How to Book/Manage Appointments:
-When admin asks to book an appointment, use trigger_automation with:
-- action: "book_appointment"
-- payload: {
-    patientName: "Full Name",
-    patientEmail: "email@example.com",
-    patientPhone: "+1234567890",
-    appointmentDate: "January 15th, 2025",
-    appointmentTime: "10:00 AM",
-    appointmentReason: "Reason for visit",
-    actionType: "create"
-  }
+**CRITICAL RULES FOR ALL TOOL USAGE:**
+1. **NEVER call ANY tool immediately when admin makes a request**
+2. **ALWAYS collect ALL required information FIRST before calling any tool**
+3. **For ANY action requiring patient/appointment data, collect it FIRST**
+
+**APPOINTMENT BOOKING RULES:**
+When admin says "book an appointment":
+1. **NEVER call tool immediately**
+2. **FIRST**, ask for ALL required information:
+   - Patient name
+   - Patient email
+   - Patient phone
+   - Appointment date
+   - Appointment time
+   - Reason for visit
+3. **ONLY AFTER** you have ALL information, use trigger_automation with:
+   - action: "book_appointment"
+   - payload: {
+       patientName: "Full Name",
+       patientEmail: "email@example.com",
+       patientPhone: "+1234567890",
+       appointmentDate: "January 15th, 2025",
+       appointmentTime: "10:00 AM",
+       appointmentReason: "Reason for visit",
+       actionType: "create"
+     }
+
+Example Conversation:
+Admin: "Book an appointment"
+You: "I'll help you book an appointment. Please provide:
+- Patient name
+- Patient email
+- Patient phone
+- Preferred date
+- Preferred time
+- Reason for visit"
+
+Admin: "John Doe, john@email.com, +1234567890, tomorrow at 2 PM, general checkup"
+You: [NOW call trigger_automation with all the information]
 
 Guidelines:
 - Be proactive and suggest relevant insights based on data
+- **NEVER call tools without required information**
+- For appointment actions, collect ALL required information FIRST
 - Always confirm appointment details before booking
-- For appointment actions, collect ALL required information first
 - Focus on business outcomes and operational efficiency
 - Maintain HIPAA compliance in all communications
 
@@ -295,6 +372,8 @@ export default function ChatWidget({
     status: 'idle',
     transcript: []
   });
+  const [isRecording, setIsRecording] = useState(false);
+  const [recognition, setRecognition] = useState<any>(null);
   const [appointmentData, setAppointmentData] = useState<{
     name?: string;
     email?: string;
@@ -305,6 +384,13 @@ export default function ChatWidget({
   }>({});
 
   const endRef = useRef<HTMLDivElement | null>(null);
+
+  // Clear appointmentData when widget closes to prevent data leak
+  useEffect(() => {
+    if (!open) {
+      setAppointmentData({});
+    }
+  }, [open]);
   const vapiRef = useRef<Vapi | null>(null);
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
   const conversationStartTime = useRef<number>(Date.now());
@@ -392,6 +478,66 @@ export default function ChatWidget({
       createConversation().catch(console.error);
     }
   }, [open, conversationId]);
+
+  // Initialize Web Speech API for STT
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Check if browser supports Web Speech API
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      console.warn('Web Speech API not supported in this browser');
+      return;
+    }
+
+    const recognitionInstance = new SpeechRecognition();
+    recognitionInstance.continuous = false;
+    recognitionInstance.interimResults = false;
+    recognitionInstance.lang = 'en-US';
+
+    recognitionInstance.onstart = () => {
+      console.log('🎤 Speech recognition started');
+      setIsRecording(true);
+    };
+
+    recognitionInstance.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      // Don't log transcript (may contain PHI)
+      productionLogger.debug('Speech recognition successful', { length: transcript.length });
+      setInput(transcript);
+      setIsRecording(false);
+    };
+
+    recognitionInstance.onerror = (event: any) => {
+      console.error('🔴 Speech recognition error:', event.error);
+      setIsRecording(false);
+
+      if (event.error === 'not-allowed') {
+        alert('Microphone access denied. Please allow microphone access in your browser settings.');
+      } else if (event.error === 'no-speech') {
+        console.log('No speech detected');
+      }
+    };
+
+    recognitionInstance.onend = () => {
+      console.log('🎤 Speech recognition ended');
+      setIsRecording(false);
+    };
+
+    setRecognition(recognitionInstance);
+
+    return () => {
+      if (recognitionInstance) {
+        recognitionInstance.abort();
+        // Clean up event handlers to prevent memory leaks
+        recognitionInstance.onstart = null;
+        recognitionInstance.onresult = null;
+        recognitionInstance.onerror = null;
+        recognitionInstance.onend = null;
+      }
+    };
+  }, []);
 
   // Setup Supabase Realtime subscription
   useEffect(() => {
@@ -604,10 +750,38 @@ export default function ChatWidget({
     setTimeout(() => handleSend(), 100);
   }
 
+  // Handle STT recording toggle
+  function handleSTTToggle() {
+    if (!recognition) {
+      alert('Speech recognition is not supported in your browser. Please try Chrome, Edge, or Safari.');
+      return;
+    }
+
+    if (isRecording) {
+      // Stop recording
+      recognition.stop();
+      setIsRecording(false);
+    } else {
+      // Start recording
+      try {
+        recognition.start();
+      } catch (error: any) {
+        console.error('Failed to start speech recognition:', error);
+        if (error.message?.includes('already started')) {
+          // Recognition already running, stop it first
+          recognition.stop();
+          setTimeout(() => {
+            recognition.start();
+          }, 100);
+        }
+      }
+    }
+  }
+
   // Handle text message send
-  async function handleSend() {
+  const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text || sending) return; // Prevent double-send
 
     if (!conversationId) {
       setMessages((prev) => [
@@ -776,7 +950,10 @@ export default function ChatWidget({
             email: emailMatch ? emailMatch[0] : prev.email,
             phone: phoneMatch ? phoneMatch[0] : prev.phone
           }));
-          console.log('📝 Contact info captured:', { email: emailMatch?.[0], phone: phoneMatch?.[0] });
+          productionLogger.debug('Contact info captured', {
+            hasEmail: !!emailMatch,
+            hasPhone: !!phoneMatch
+          });
         }
 
         // Check for negative sentiment and trigger alert
@@ -829,7 +1006,7 @@ export default function ChatWidget({
     } finally {
       setSending(false);
     }
-  }
+  }, [input, sending, conversationId, messages, canUseClientGroq]);
 
   // Start VAPI Web voice call
   async function startVoiceCall() {
@@ -1071,7 +1248,7 @@ export default function ChatWidget({
               <div className="flex gap-2 sm:gap-3 items-end">
                 <input
                   className="border border-gray-300 dark:border-gray-600 rounded-xl flex-1 px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base bg-white dark:bg-healthcare-dark-bg-secondary text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-healthcare-primary dark:focus:ring-healthcare-accent focus:border-transparent transition-all shadow-sm touch-manipulation resize-none"
-                  placeholder={canUseClientGroq ? 'Type a message…' : 'Configure Supabase'}
+                  placeholder={canUseClientGroq ? (isRecording ? 'Listening...' : 'Type or speak a message…') : 'Configure Supabase'}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -1080,13 +1257,26 @@ export default function ChatWidget({
                       handleSend();
                     }
                   }}
-                  disabled={sending}
+                  disabled={sending || isRecording}
                   aria-label="Chat message input"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="sentences"
                   maxLength={1000}
                 />
+                <button
+                  className={`shrink-0 px-3 py-2.5 sm:py-3 rounded-xl hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all text-sm font-medium flex items-center gap-2 shadow-md touch-manipulation ${
+                    isRecording
+                      ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                  onClick={handleSTTToggle}
+                  disabled={sending || !canUseClientGroq}
+                  aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
+                  title={isRecording ? 'Stop recording (Click to stop)' : 'Voice input (Click to speak)'}
+                >
+                  <Mic className={`w-4 h-4 sm:w-5 sm:h-5 ${isRecording ? 'animate-pulse' : ''}`} />
+                </button>
                 <button
                   className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-healthcare-primary to-healthcare-accent dark:from-healthcare-accent dark:to-healthcare-primary text-white rounded-xl hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all text-sm font-medium flex items-center gap-2 shadow-md touch-manipulation"
                   onClick={handleSend}
@@ -1102,6 +1292,13 @@ export default function ChatWidget({
                   <span className="hidden sm:inline">Send</span>
                 </button>
               </div>
+              {/* Recording indicator */}
+              {isRecording && (
+                <div className="mt-2 flex items-center justify-center gap-2 text-sm text-red-600 dark:text-red-400 animate-pulse">
+                  <div className="w-2 h-2 bg-red-600 dark:bg-red-400 rounded-full animate-ping" />
+                  <span className="font-medium">Recording... Click mic to stop</span>
+                </div>
+              )}
             </div>
           ) : (
             // Voice mode controls - PWA optimized for touch

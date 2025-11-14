@@ -1,0 +1,1045 @@
+{
+  "name": "WhatsApp Serenity Hospital Bot - FIXED",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "id": "cff6c529-0b06-4385-a69b-c868c106e8dd",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "position": [
+        -4752,
+        272
+      ],
+      "webhookId": "whatsapp-serenity-trigger",
+      "typeVersion": 1,
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "rkTBSmZo3jUtd0Wt",
+          "name": "WhatsApp OAuth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Debug incoming WhatsApp data\nconst items = $input.all();\n\nfor (const item of items) {\n  console.log('=== INCOMING WHATSAPP WEBHOOK ===');\n  console.log('Full payload:', JSON.stringify(item.json, null, 2));\n  \n  // Validate data structure\n  if (!item.json.messages || !Array.isArray(item.json.messages)) {\n    console.log('⚠️ WARNING: No messages array found');\n    item.json.messages = [];\n  }\n  \n  if (!item.json.contacts || !Array.isArray(item.json.contacts)) {\n    console.log('⚠️ WARNING: No contacts array found');\n    item.json.contacts = [];\n  }\n  \n  // Log message type\n  if (item.json.messages[0]) {\n    const msg = item.json.messages[0];\n    console.log('Message type:', msg.type);\n    console.log('Has text:', !!msg.text);\n    console.log('Has audio:', !!msg.audio);\n    console.log('Has image:', !!msg.image);\n    console.log('Has document:', !!msg.document);\n    console.log('Audio ID:', msg.audio?.id || 'N/A');\n  }\n}\n\nreturn items;"
+      },
+      "id": "fbcbf6e7-e35b-4240-9dc5-7e1fc56dd87c",
+      "name": "Debug Incoming Data",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -4528,
+        272
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "text-check",
+                    "leftValue": "={{ $json.messages && $json.messages[0] && $json.messages[0].text && $json.messages[0].text.body ? $json.messages[0].text.body : '' }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEmpty"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "audio-check",
+                    "leftValue": "={{ $json.messages && $json.messages[0] && $json.messages[0].audio ? 'yes' : 'no' }}",
+                    "rightValue": "yes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Voice"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "image-check",
+                    "leftValue": "={{ $json.messages && $json.messages[0] && $json.messages[0].image ? 'yes' : 'no' }}",
+                    "rightValue": "yes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Image"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "document-check",
+                    "leftValue": "={{ $json.messages && $json.messages[0] && $json.messages[0].document ? 'yes' : 'no' }}",
+                    "rightValue": "yes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Document"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "22384a7a-ca58-42a6-847f-d8df398d456d",
+      "name": "Input Type Router",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        -4304,
+        272
+      ],
+      "typeVersion": 3.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user-msg",
+              "name": "user_message",
+              "type": "string",
+              "value": "={{ $('WhatsApp Trigger').item.json.messages[0].text.body }}"
+            },
+            {
+              "id": "patient-phone",
+              "name": "patient_phone",
+              "type": "string",
+              "value": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}"
+            },
+            {
+              "id": "msg-from",
+              "name": "from_number",
+              "type": "string",
+              "value": "={{ $('WhatsApp Trigger').item.json.messages[0].from }}"
+            },
+            {
+              "id": "msg-type",
+              "name": "message_type",
+              "type": "string",
+              "value": "text"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "67a61db4-787d-429c-afe4-be25dfa4b5d1",
+      "name": "Process Text Input",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -4080,
+        160
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "resource": "media",
+        "operation": "mediaUrlGet",
+        "mediaGetId": "={{ $('WhatsApp Trigger').item.json.messages[0].audio.id }}"
+      },
+      "id": "be0abbe6-5cef-448f-a42d-837980f02d6d",
+      "name": "Get Audio URL",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        -4080,
+        320
+      ],
+      "typeVersion": 1,
+      "webhookId": "e76d1198-7e34-4eb9-b216-e1091ef78cbd",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6QZqzp1WrZm2ZtKa",
+          "name": "wbapi3"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle audio URL fetch errors\nconst item = $input.first();\n\nconsole.log('=== AUDIO URL FETCH RESULT ===');\nconsole.log('Has error:', !!item.json.error);\nconsole.log('Has URL:', !!item.json.url);\n\nif (item.json.error || !item.json.url) {\n  console.log('❌ Failed to fetch audio URL:', item.json.error || 'No URL returned');\n  \n  // Return error data that will send a message to user\n  return [{\n    json: {\n      user_message: '🎤 Sorry, I had trouble processing your voice message. Please try sending it again, or send a text message instead. 📝',\n      from_number: $('WhatsApp Trigger').item.json.messages[0].from,\n      patient_phone: $('WhatsApp Trigger').item.json.contacts[0].wa_id,\n      message_type: 'error',\n      error_type: 'audio_fetch_failed'\n    }\n  }];\n}\n\nconsole.log('✅ Audio URL fetched successfully:', item.json.url);\nreturn [item];"
+      },
+      "id": "f5a8fc14-1c41-48be-bd4f-c49e2b53b77f",
+      "name": "Check Audio URL Success",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -3856,
+        320
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "has-error",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.error_type }}",
+              "rightValue": "audio_fetch_failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "02b05fc2-81ef-40ff-a159-5bfd30ce3309",
+      "name": "Is Error Path",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -3632,
+        320
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "9d040a6a-32cd-4c54-9113-bdcaa2b82698",
+      "name": "Download Audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -3408,
+        208
+      ],
+      "typeVersion": 4.2,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "GgFiRG9sr2PhP6Va",
+          "name": "wabapi"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle audio download errors\nconst item = $input.first();\n\nconsole.log('=== AUDIO DOWNLOAD RESULT ===');\nconsole.log('Has error:', !!item.json.error);\nconsole.log('Has binary:', !!item.binary);\n\nif (item.json.error || !item.binary || !item.binary.data) {\n  console.log('❌ Failed to download audio:', item.json.error || 'No binary data');\n  \n  return [{\n    json: {\n      user_message: '🎤 Sorry, I couldn\\'t download your voice message. Please try again or send a text message. 📝',\n      from_number: $('WhatsApp Trigger').item.json.messages[0].from,\n      patient_phone: $('WhatsApp Trigger').item.json.contacts[0].wa_id,\n      message_type: 'error',\n      error_type: 'audio_download_failed'\n    }\n  }];\n}\n\nconsole.log('✅ Audio downloaded successfully');\nreturn [item];"
+      },
+      "id": "1f195b29-b6a9-44aa-b5e6-e5a607145b66",
+      "name": "Check Download Success",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -3184,
+        208
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "download-error",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.error_type }}",
+              "rightValue": "audio_download_failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "845419b6-21f2-4edf-ac62-3d2519cc5ae1",
+      "name": "Is Download Error",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -2960,
+        208
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {}
+      },
+      "id": "4f982a6f-2358-41dd-8763-c850d91958b5",
+      "name": "Transcribe Audio (Whisper)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "position": [
+        -2736,
+        96
+      ],
+      "typeVersion": 1.8,
+      "credentials": {
+        "openAiApi": {
+          "id": "yM1phcI15F0JkoxQ",
+          "name": "OpenAi account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle transcription errors\nconst item = $input.first();\n\nconsole.log('=== TRANSCRIPTION RESULT ===');\nconsole.log('Has error:', !!item.json.error);\nconsole.log('Has text:', !!item.json.text);\n\nif (item.json.error || !item.json.text || item.json.text.trim() === '') {\n  console.log('❌ Failed to transcribe audio:', item.json.error || 'No text returned');\n  \n  return [{\n    json: {\n      user_message: '🎤 I couldn\\'t understand your voice message. Please speak clearly and try again, or send a text message. 📝',\n      from_number: $('WhatsApp Trigger').item.json.messages[0].from,\n      patient_phone: $('WhatsApp Trigger').item.json.contacts[0].wa_id,\n      message_type: 'error',\n      error_type: 'transcription_failed'\n    }\n  }];\n}\n\nconsole.log('✅ Audio transcribed successfully:', item.json.text);\nreturn [item];"
+      },
+      "id": "5b92c6a6-56ff-4241-aedd-75e5668473a1",
+      "name": "Check Transcription Success",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -2512,
+        96
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "transcription-error",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.error_type }}",
+              "rightValue": "transcription_failed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8481f806-4a4c-42fb-93f6-b2c3d0aeda7a",
+      "name": "Is Transcription Error",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -2288,
+        96
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "user-msg-audio",
+              "name": "user_message",
+              "type": "string",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "id": "patient-phone-audio",
+              "name": "patient_phone",
+              "type": "string",
+              "value": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}"
+            },
+            {
+              "id": "msg-from-audio",
+              "name": "from_number",
+              "type": "string",
+              "value": "={{ $('WhatsApp Trigger').item.json.messages[0].from }}"
+            },
+            {
+              "id": "msg-type-audio",
+              "name": "message_type",
+              "type": "string",
+              "value": "voice"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b17adfa4-7111-48fb-855a-e962059e55d2",
+      "name": "Process Audio Input",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -2064,
+        -16
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://yfrpxqvjshwaaomgcaoq.supabase.co/functions/v1/groq-chat",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlmcnB4cXZqc2h3YWFvbWdjYW9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIyODI5MzcsImV4cCI6MjA3Nzg1ODkzN30.v_kQJlJy7PVF9wCZgS5A-VJv4gnWTLNgDx_xb9GRSB4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are the AI receptionist for Serenity Royale Hospital in Lagos, Nigeria. You help patients book appointments via WhatsApp.\\n\\nYour responsibilities:\\n- Book new appointments (collect: name, email, phone, date, time, reason)\\n- Show patient's existing appointments\\n- Check appointment availability\\n- Reschedule or cancel appointments\\n\\nCultural context:\\n- WhatsApp is Nigeria's primary communication channel\\n- Use emojis appropriately: ✅ 📅 🕐\\n- Be warm, professional, and concise\\n- Phone format: +234XXXXXXXXXX\\n\\nALWAYS:\\n- Check availability BEFORE booking\\n- Collect ALL required info before using tools\\n- Confirm actions with patient\\n- Mention: 'Please arrive 10 minutes early'\\n\\nFor emergencies: 'Call 112 or visit our ER immediately'\\n\\nToday's date: {{ new Date().toISOString().split('T')[0] }}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.user_message }}\"\n    }\n  ],\n  \"mode\": \"public\",\n  \"patient_phone\": \"{{ $json.patient_phone }}\",\n  \"message_type\": \"{{ $json.message_type }}\",\n  \"model\": \"llama-3.1-8b-instant\",\n  \"temperature\": 0.7,\n  \"max_tokens\": 1000\n}",
+        "options": {}
+      },
+      "id": "a042f18d-fab8-4e80-bcf6-a8e0a490407f",
+      "name": "Call Groq Edge Function",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -1824,
+        96
+      ],
+      "typeVersion": 4.2,
+      "credentials": {
+        "supabaseApi": {
+          "id": "7ljtqTelzpKvg146",
+          "name": "srh"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle Groq API errors\nconst item = $input.first();\n\nconsole.log('=== GROQ API RESULT ===');\nconsole.log('Has error:', !!item.json.error);\nconsole.log('Has response:', !!item.json.response || !!item.json.message);\n\nif (item.json.error || (!item.json.response && !item.json.message)) {\n  console.log('❌ Groq API failed:', item.json.error || 'No response');\n  \n  return [{\n    json: {\n      response: '🏥 Sorry, I\\'m experiencing technical difficulties right now. Please try again in a moment, or call us directly at +234 XXX XXX XXXX for urgent matters.',\n      from_number: $('WhatsApp Trigger').item.json.messages[0].from,\n      message_type: $('Process Text Input').item?.json?.message_type || $('Process Audio Input').item?.json?.message_type || 'text',\n      error_recovery: true\n    }\n  }];\n}\n\nconsole.log('✅ Groq API response received');\nreturn [item];"
+      },
+      "id": "1c24be65-4120-4602-811b-cb22a3825bba",
+      "name": "Check Groq Response",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1600,
+        96
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "is-voice",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.message_type }}",
+              "rightValue": "voice"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a8a9b87e-7e53-4276-94fb-068334b1d30c",
+      "name": "Check If Voice Input",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -1376,
+        96
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "input": "={{ $('Check Groq Response').item.json.response || $('Check Groq Response').item.json.message }}",
+        "voice": "onyx",
+        "options": {}
+      },
+      "id": "47e94d5d-5cfb-4922-aa4a-4380200e1051",
+      "name": "Generate Audio Response (TTS)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "position": [
+        -1168,
+        -16
+      ],
+      "typeVersion": 1.8,
+      "credentials": {
+        "openAiApi": {
+          "id": "yM1phcI15F0JkoxQ",
+          "name": "OpenAi account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle TTS errors - fallback to text\nconst item = $input.first();\n\nconsole.log('=== TTS RESULT ===');\nconsole.log('Has error:', !!item.json.error);\nconsole.log('Has binary:', !!item.binary);\n\nif (item.json.error || !item.binary || !item.binary.data) {\n  console.log('⚠️ TTS failed, falling back to text response');\n  \n  return [{\n    json: {\n      response: $('Check Groq Response').item.json.response || $('Check Groq Response').item.json.message,\n      from_number: $('WhatsApp Trigger').item.json.messages[0].from,\n      message_type: 'text',\n      tts_fallback: true\n    }\n  }];\n}\n\nconsole.log('✅ TTS generated successfully');\nreturn [item];"
+      },
+      "id": "47a82b7c-0425-42c5-a2af-053ed8b8cd4e",
+      "name": "Check TTS Success",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -944,
+        -16
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "tts-failed",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.tts_fallback }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b04b53b6-f94d-40c4-98e7-2caf112d544c",
+      "name": "Is TTS Fallback",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -720,
+        -16
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix audio MIME type for WhatsApp compatibility\nfor (const item of $input.all()) {\n  if (item.binary) {\n    const binaryPropertyNames = Object.keys(item.binary);\n    for (const propName of binaryPropertyNames) {\n      if (item.binary[propName].mimeType === 'audio/mp3') {\n        item.binary[propName].mimeType = 'audio/mpeg';\n        console.log('✅ Fixed MIME type from audio/mp3 to audio/mpeg');\n      }\n    }\n  }\n}\nreturn $input.all();"
+      },
+      "id": "6af0e97c-ca86-4fdc-8637-ea8ed04ce54b",
+      "name": "Fix Audio MimeType",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -496,
+        -128
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "825467040645950",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.messages[0].from }}",
+        "messageType": "audio",
+        "mediaPath": "useMedian8n",
+        "additionalFields": {}
+      },
+      "id": "7a9708ac-b863-49ca-88de-8cf27ee74dd6",
+      "name": "Send Audio Response",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        -272,
+        -128
+      ],
+      "typeVersion": 1,
+      "webhookId": "cb19fe3b-2ca8-4368-8501-0edc5aaecdba",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "WqEIBBwyWxusIVCc",
+          "name": "WhatsApp account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "825467040645950",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.messages[0].from }}",
+        "textBody": "={{ $('Check Groq Response').item.json.response || $('Check Groq Response').item.json.message }}",
+        "additionalFields": {}
+      },
+      "id": "0369130e-7c74-4ae1-8cb0-29212754ab02",
+      "name": "Send Text Response",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        -496,
+        208
+      ],
+      "typeVersion": 1,
+      "webhookId": "d19d312d-d215-4431-b0f7-d0b78d1dcb5c",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6QZqzp1WrZm2ZtKa",
+          "name": "wbapi3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "825467040645950",
+        "recipientPhoneNumber": "={{ $json.from_number }}",
+        "textBody": "={{ $json.user_message }}",
+        "additionalFields": {}
+      },
+      "id": "a5f3dcff-13df-4ba8-ab81-3e840badd24d",
+      "name": "Send Error Message to User",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        -3408,
+        432
+      ],
+      "typeVersion": 1,
+      "webhookId": "error-message-webhook-1",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "6QZqzp1WrZm2ZtKa",
+          "name": "wbapi3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle unsupported message types\nconst item = $input.first();\nconsole.log('⚠️ Unsupported message type received:', JSON.stringify(item.json, null, 2));\n\nconst messageType = item.json.messages?.[0]?.type || 'unknown';\nconst supportedTypes = ['text', 'audio', 'voice'];\n\nlet errorMessage = '';\n\nif (messageType === 'image') {\n  errorMessage = '📷 Image messages are not yet supported. Please describe your issue in a text or voice message instead.';\n} else if (messageType === 'document') {\n  errorMessage = '📄 Document messages are not yet supported. Please describe your issue in a text or voice message instead.';\n} else if (messageType === 'video') {\n  errorMessage = '🎥 Video messages are not yet supported. Please describe your issue in a text or voice message instead.';\n} else if (messageType === 'sticker') {\n  errorMessage = '😊 I appreciate the sticker, but I can only respond to text or voice messages. How can I help you today?';\n} else if (messageType === 'location') {\n  errorMessage = '📍 Location messages are not yet supported. Please send a text or voice message instead.';\n} else if (messageType === 'contacts') {\n  errorMessage = '👤 Contact card messages are not yet supported. Please send a text or voice message instead.';\n} else {\n  errorMessage = '❌ Sorry, I can only process text and voice messages. Please send one of those message types so I can assist you.';\n}\n\nreturn [{\n  json: {\n    from_number: item.json.messages?.[0]?.from || 'unknown',\n    user_message: errorMessage,\n    message_type: 'error',\n    original_type: messageType\n  }\n}];"
+      },
+      "id": "7bc2d62f-130d-4a9d-8b06-31ddbedc768a",
+      "name": "Handle Unsupported Types",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -4080,
+        592
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "825467040645950",
+        "recipientPhoneNumber": "={{ $json.from_number }}",
+        "textBody": "={{ $json.user_message }}",
+        "additionalFields": {}
+      },
+      "id": "e3b693f9-ba66-4df7-b9d3-42f04da38c49",
+      "name": "Send Unsupported Type Message",
+      "type": "n8n-nodes-base.whatsApp",
+      "position": [
+        -3856,
+        592
+      ],
+      "typeVersion": 1,
+      "webhookId": "10e942bb-146e-4f3d-b3fa-34ed15aad4f6",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "DK7X9Fgi5fxPJ1Fh",
+          "name": "wbapi2"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "WhatsApp Trigger": [
+      {
+        "json": {
+          "contacts": [
+            {
+              "profile": {
+                "name": "Samuel Test"
+              },
+              "wa_id": "2348141995397"
+            }
+          ],
+          "messages": [
+            {
+              "from": "2348141995397",
+              "id": "wamid.HBgNMjM0ODE0MTk5NTM5NxUCABEYEjU0RTIzNUI2Qzg5MTNEQUE2MwA=",
+              "timestamp": "1731488400",
+              "type": "document",
+              "document": {
+                "mime_type": "application/pdf",
+                "sha256": "z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4j3i2h1g0f9e8d7c6b5a4z3y2x1w0v9u8",
+                "id": "5555666677778888",
+                "filename": "medical_report.pdf",
+                "caption": "Here is my medical report"
+              }
+            }
+          ],
+          "metadata": {
+            "phone_number_id": "825467040645950"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "Debug Incoming Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debug Incoming Data": {
+      "main": [
+        [
+          {
+            "node": "Input Type Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Type Router": {
+      "main": [
+        [
+          {
+            "node": "Process Text Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Audio URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [],
+        [
+          {
+            "node": "Handle Unsupported Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Text Input": {
+      "main": [
+        [
+          {
+            "node": "Call Groq Edge Function",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Audio URL": {
+      "main": [
+        [
+          {
+            "node": "Check Audio URL Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Audio URL Success": {
+      "main": [
+        [
+          {
+            "node": "Is Error Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Error Path": {
+      "main": [
+        [
+          {
+            "node": "Send Error Message to User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Audio": {
+      "main": [
+        [
+          {
+            "node": "Check Download Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Download Success": {
+      "main": [
+        [
+          {
+            "node": "Is Download Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Download Error": {
+      "main": [
+        [
+          {
+            "node": "Send Error Message to User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Transcribe Audio (Whisper)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Audio (Whisper)": {
+      "main": [
+        [
+          {
+            "node": "Check Transcription Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Transcription Success": {
+      "main": [
+        [
+          {
+            "node": "Is Transcription Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Transcription Error": {
+      "main": [
+        [
+          {
+            "node": "Send Error Message to User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Audio Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Audio Input": {
+      "main": [
+        [
+          {
+            "node": "Call Groq Edge Function",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Groq Edge Function": {
+      "main": [
+        [
+          {
+            "node": "Check Groq Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Groq Response": {
+      "main": [
+        [
+          {
+            "node": "Check If Voice Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Voice Input": {
+      "main": [
+        [
+          {
+            "node": "Generate Audio Response (TTS)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Text Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Audio Response (TTS)": {
+      "main": [
+        [
+          {
+            "node": "Check TTS Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check TTS Success": {
+      "main": [
+        [
+          {
+            "node": "Is TTS Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is TTS Fallback": {
+      "main": [
+        [
+          {
+            "node": "Send Text Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fix Audio MimeType",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fix Audio MimeType": {
+      "main": [
+        [
+          {
+            "node": "Send Audio Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Unsupported Types": {
+      "main": [
+        [
+          {
+            "node": "Send Unsupported Type Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "00f1d7a5-34fe-4099-8754-21b287d8abb4",
+  "meta": {
+    "templateId": "3586",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "608c81b18f4cae0261555234853022f89dd9b2a792f403581a4b93c4da12a2a0"
+  },
+  "id": "mczvxXs4Di1je6Gb",
+  "tags": []
+}

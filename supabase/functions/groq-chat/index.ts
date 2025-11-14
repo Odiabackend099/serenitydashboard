@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { getCorsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 import { checkRateLimit, getClientId, rateLimitResponse } from "../_shared/rate-limiter.ts";
 import { logger, sanitizeForAuditLog } from "../_shared/hipaa.ts";
@@ -16,6 +17,123 @@ interface GroqRequest {
   tool_choice?: string;
   temperature?: number;
   max_tokens?: number;
+  mode?: 'public' | 'private'; // WhatsApp integration: auto-load public tools
+  patient_phone?: string; // WhatsApp patient identifier (+234...)
+  message_type?: string; // text, voice, image, document
+}
+
+// Zod validation schemas
+const EmailSchema = z.string().email().max(254);
+const PhoneSchema = z.string().regex(/^\+?[1-9]\d{9,14}$/);
+const NameSchema = z.string().min(2).max(100).regex(/^[a-zA-Z\s'-]+$/);
+const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const TimeSchema = z.string().regex(/^(0?[1-9]|1[0-2]):[0-5][0-9]\s?(AM|PM)$/i);
+const ReasonSchema = z.string().min(3).max(500);
+
+const AppointmentBookingSchema = z.object({
+  name: NameSchema,
+  email: EmailSchema,
+  phone: PhoneSchema,
+  date: DateSchema,
+  time: TimeSchema,
+  reason: ReasonSchema
+});
+
+// Helper function to log WhatsApp conversations to database
+async function logWhatsAppConversation(
+  supabase: any,
+  patientPhone: string,
+  inboundMessage: string,
+  messageType: string,
+  aiResponse: string,
+  toolExecuted?: string,
+  toolResult?: any
+) {
+  try {
+    // 1. Find or create conversation
+    let { data: conversation, error: convError } = await supabase
+      .from('whatsapp_conversations')
+      .select('id, patient_email, patient_name')
+      .eq('patient_phone', patientPhone)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (convError || !conversation) {
+      // Create new conversation
+      const { data: newConv, error: createError } = await supabase
+        .from('whatsapp_conversations')
+        .insert({
+          patient_phone: patientPhone,
+          conversation_status: 'active',
+          last_message_from: 'patient',
+          last_message_at: new Date().toISOString(),
+          conversation_context: {
+            topic: toolExecuted || 'general_inquiry',
+            message_count: 1
+          }
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        logger.error('Failed to create conversation', { error: createError.message });
+        return;
+      }
+      conversation = newConv;
+    } else {
+      // Update existing conversation
+      await supabase
+        .from('whatsapp_conversations')
+        .update({
+          last_message_from: 'business',
+          last_message_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversation.id);
+    }
+
+    // 2. Log inbound message
+    await supabase.from('whatsapp_messages').insert({
+      conversation_id: conversation.id,
+      direction: 'inbound',
+      message_type: messageType,
+      message_content: inboundMessage,
+      from_phone: patientPhone,
+      to_phone: 'business',
+      timestamp: new Date().toISOString()
+    });
+
+    // 3. Log outbound AI response
+    await supabase.from('whatsapp_messages').insert({
+      conversation_id: conversation.id,
+      direction: 'outbound',
+      message_type: 'text',
+      message_content: aiResponse,
+      from_phone: 'business',
+      to_phone: patientPhone,
+      ai_response: aiResponse,
+      tool_executed: toolExecuted || null,
+      tool_result: toolResult || null,
+      timestamp: new Date().toISOString()
+    });
+
+    // 4. Update analytics
+    const today = new Date().toISOString().split('T')[0];
+    await supabase.rpc('increment_analytics', {
+      p_date: today,
+      p_tool_executed: toolExecuted
+    });
+
+    logger.info('WhatsApp conversation logged', {
+      conversationId: conversation.id,
+      patientPhone: patientPhone.substring(0, 8) + '***',
+      toolExecuted
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to log WhatsApp conversation', { error: error.message });
+  }
 }
 
 serve(async (req) => {
@@ -48,11 +166,110 @@ serve(async (req) => {
     const {
       messages,
       model = 'llama-3.1-8b-instant',
-      tools,
+      tools: requestTools,
       tool_choice = 'auto',
       temperature = 0.7,
       max_tokens = 1000,
+      mode,
+      patient_phone,
+      message_type,
     }: GroqRequest = await req.json();
+
+    // Auto-load public tools for WhatsApp integration
+    const publicTools = mode === 'public' ? [
+      {
+        type: 'function',
+        function: {
+          name: 'book_appointment_with_confirmation',
+          description: 'Book an appointment and send confirmation email. **CRITICAL**: DO NOT call this tool until you have collected ALL required information from the user: name, email, phone, date, time, and reason. If any information is missing, ASK the user for it first before calling this tool.',
+          parameters: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Patient full name' },
+              email: { type: 'string', description: 'Patient email address' },
+              phone: { type: 'string', description: 'Patient phone number' },
+              date: { type: 'string', description: 'Appointment date in YYYY-MM-DD format (e.g., "2025-11-15"). For "tomorrow", calculate the actual date. Today is ' + new Date().toISOString().split('T')[0] },
+              time: { type: 'string', description: 'Appointment time in 12-hour format with AM/PM (e.g., "2:30 PM")' },
+              reason: { type: 'string', description: 'Reason for appointment' }
+            },
+            required: ['name', 'email', 'phone', 'date', 'time', 'reason']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_my_appointments',
+          description: 'Get patient\'s appointments by email. Use this when a patient asks "show my appointments" or "what appointments do I have".',
+          parameters: {
+            type: 'object',
+            properties: {
+              email: { type: 'string', description: 'Patient email address to lookup appointments' },
+              status: { type: 'string', enum: ['all', 'upcoming', 'past', 'confirmed', 'pending', 'cancelled'], description: 'Filter appointments by status. Default is "upcoming"' }
+            },
+            required: ['email']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'check_availability',
+          description: 'Check if a specific date and time slot is available for booking',
+          parameters: {
+            type: 'object',
+            properties: {
+              date: { type: 'string', description: 'Date to check in YYYY-MM-DD format' },
+              time: { type: 'string', description: 'Time to check in 12-hour format with AM/PM' },
+              provider: { type: 'string', description: 'Provider name (optional). Default is "Dr. Sarah Johnson"' }
+            },
+            required: ['date', 'time']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'reschedule_appointment',
+          description: 'Reschedule an existing appointment to a new date and time',
+          parameters: {
+            type: 'object',
+            properties: {
+              appointment_id: { type: 'string', description: 'The appointment ID to reschedule' },
+              email: { type: 'string', description: 'Patient email for verification' },
+              new_date: { type: 'string', description: 'New appointment date in YYYY-MM-DD format' },
+              new_time: { type: 'string', description: 'New appointment time in 12-hour format with AM/PM' },
+              reason: { type: 'string', description: 'Reason for rescheduling (optional)' }
+            },
+            required: ['appointment_id', 'email', 'new_date', 'new_time']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'cancel_appointment',
+          description: 'Cancel an existing appointment',
+          parameters: {
+            type: 'object',
+            properties: {
+              appointment_id: { type: 'string', description: 'The appointment ID to cancel' },
+              email: { type: 'string', description: 'Patient email for verification' },
+              reason: { type: 'string', description: 'Reason for cancellation (optional)' }
+            },
+            required: ['appointment_id', 'email']
+          }
+        }
+      }
+    ] : [];
+
+    // Merge tools: use request tools if provided, otherwise use public tools for public mode
+    const tools = requestTools || (publicTools.length > 0 ? publicTools : undefined);
+
+    // Log WhatsApp-specific context
+    if (mode === 'public' && patient_phone) {
+      logger.info('WhatsApp request', { phone: patient_phone.substring(0, 8) + '***', messageType: message_type });
+    }
 
     // 🔒 SECURITY: Block admin tool execution for unauthenticated requests
     const authHeader = req.headers.get('authorization');
@@ -231,10 +448,21 @@ serve(async (req) => {
 
             case 'book_appointment_with_confirmation': {
               // PUBLIC TOOL: Book appointment and send confirmation via n8n
+              // SECURITY: Validate all inputs with Zod
+              const validationResult = AppointmentBookingSchema.safeParse(parsedArgs);
+
+              if (!validationResult.success) {
+                const errors = validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+                logger.warn('Appointment booking validation failed', { errors });
+                throw new Error(`Invalid appointment data: ${errors}`);
+              }
+
+              const validated = validationResult.data;
+
               logger.info('Booking appointment via n8n', {
-                patient: parsedArgs.name,
-                email: parsedArgs.email,
-                rawDate: parsedArgs.date
+                patient: validated.name.substring(0, 10) + '...',
+                email: validated.email.substring(0, 5) + '***',
+                date: validated.date
               });
 
               const n8nWebhookBase = Deno.env.get('N8N_WEBHOOK_BASE');
@@ -243,7 +471,7 @@ serve(async (req) => {
               }
 
               // Parse relative dates (tomorrow, today, etc.) to YYYY-MM-DD format
-              let appointmentDate = parsedArgs.date;
+              let appointmentDate = validated.date;
               if (appointmentDate && (appointmentDate.toLowerCase().includes('tomorrow') || appointmentDate.toLowerCase() === 'tomorrow')) {
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
@@ -256,14 +484,14 @@ serve(async (req) => {
 
               // Call n8n webhook with appointment data
               // CRITICAL: n8n workflow expects all data in $json.body.*
-              const emailSubject = `Appointment Confirmation - ${appointmentDate} at ${parsedArgs.time}`;
-              const emailMessage = `Dear ${parsedArgs.name},
+              const emailSubject = `Appointment Confirmation - ${appointmentDate} at ${validated.time}`;
+              const emailMessage = `Dear ${validated.name},
 
 Your appointment has been confirmed!
 
 📅 Date: ${appointmentDate}
-🕐 Time: ${parsedArgs.time}
-📋 Reason: ${parsedArgs.reason || 'General consultation'}
+🕐 Time: ${validated.time}
+📋 Reason: ${validated.reason || 'General consultation'}
 
 Please arrive 10 minutes early.
 
@@ -279,23 +507,23 @@ Serenity Hospital Team`;
                   action: 'book_appointment', // Nested for $json.body.action
                   channel: 'webchat',
                   // Gmail node fields (accessed via $json.body.*)
-                  toList: parsedArgs.email,
+                  toList: validated.email,
                   subject: emailSubject,
                   message: emailMessage,
                   // Patient data (required for Create Appointment node)
-                  patient_ref: parsedArgs.email, // Required NOT NULL field for appointments table
-                  patient_name: parsedArgs.name,
-                  patientName: parsedArgs.name, // Fallback for backward compatibility
-                  patient_email: parsedArgs.email,
-                  patientEmail: parsedArgs.email, // Fallback
-                  patient_phone: parsedArgs.phone || '',
-                  patientPhone: parsedArgs.phone || '', // Fallback
+                  patient_ref: validated.email, // Required NOT NULL field for appointments table
+                  patient_name: validated.name,
+                  patientName: validated.name, // Fallback for backward compatibility
+                  patient_email: validated.email,
+                  patientEmail: validated.email, // Fallback
+                  patient_phone: validated.phone || '',
+                  patientPhone: validated.phone || '', // Fallback
                   appointment_date: appointmentDate,
                   appointmentDate: appointmentDate, // Fallback
-                  appointment_time: parsedArgs.time,
-                  appointmentTime: parsedArgs.time, // Fallback
-                  reason: parsedArgs.reason || 'General consultation',
-                  appointmentReason: parsedArgs.reason || 'General consultation', // Fallback
+                  appointment_time: validated.time,
+                  appointmentTime: validated.time, // Fallback
+                  reason: validated.reason || 'General consultation',
+                  appointmentReason: validated.reason || 'General consultation', // Fallback
                   source: 'groq_chat_widget',
                   timestamp: new Date().toISOString(),
                 }
@@ -304,7 +532,7 @@ Serenity Hospital Team`;
               logger.info('Sending to n8n webhook', {
                 action: n8nPayload.action,
                 bodyAction: n8nPayload.body.action,
-                patientEmail: parsedArgs.email,
+                patientEmail: validated.email.substring(0, 5) + '***',
                 appointmentDate
               });
 
@@ -340,11 +568,11 @@ Serenity Hospital Team`;
                 success: true,
                 message: 'Appointment booked successfully. Confirmation email sent.',
                 appointmentDetails: {
-                  patientName: parsedArgs.name,
-                  patientEmail: parsedArgs.email,
+                  patientName: validated.name,
+                  patientEmail: validated.email,
                   date: appointmentDate,
-                  time: parsedArgs.time,
-                  reason: parsedArgs.reason || 'General consultation',
+                  time: validated.time,
+                  reason: validated.reason || 'General consultation',
                 },
                 n8nResponse: n8nResult,
               };
@@ -400,19 +628,19 @@ Serenity Hospital Team`;
               logger.info('Checking availability', {
                 date: parsedArgs.date,
                 time: parsedArgs.time,
-                doctor: parsedArgs.doctor_name
+                provider: parsedArgs.provider
               });
 
               const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
 
-              // Query for conflicting appointments
+              // Query for conflicting appointments (simplified - doesn't filter by provider)
+              // This checks if ANY appointment exists at this time slot
               const { data, error } = await supabaseClient
                 .from('appointments')
-                .select('*')
+                .select('id, appointment_date, appointment_time, patient_name, status')
                 .eq('appointment_date', parsedArgs.date)
                 .eq('appointment_time', parsedArgs.time)
-                .eq('doctor_name', parsedArgs.doctor_name || 'Dr. Smith')
-                .in('status', ['scheduled', 'confirmed']);
+                .in('status', ['pending', 'confirmed']);
 
               if (error) {
                 logger.error('Availability check failed', { error: error.message });
@@ -672,6 +900,200 @@ Serenity Hospital Team`;
               break;
             }
 
+            case 'get_my_appointments': {
+              // PUBLIC TOOL: Get patient's appointments by email
+              logger.info('Fetching patient appointments', { email: parsedArgs.email, status: parsedArgs.status });
+
+              const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+
+              let query = supabaseClient
+                .from('appointments')
+                .select('*')
+                .eq('patient_email', parsedArgs.email)
+                .order('appointment_date', { ascending: true })
+                .order('appointment_time', { ascending: true });
+
+              // Apply status filter
+              const status = parsedArgs.status || 'upcoming';
+              const today = new Date().toISOString().split('T')[0];
+
+              switch (status) {
+                case 'upcoming':
+                  query = query.gte('appointment_date', today).in('status', ['confirmed', 'pending']);
+                  break;
+                case 'past':
+                  query = query.lt('appointment_date', today);
+                  break;
+                case 'confirmed':
+                case 'pending':
+                case 'cancelled':
+                  query = query.eq('status', status);
+                  break;
+                case 'all':
+                  // No filter
+                  break;
+              }
+
+              query = query.limit(10);
+
+              const { data, error } = await query;
+
+              if (error) {
+                logger.error('Failed to fetch patient appointments', { error: error.message });
+                throw new Error(`Database query failed: ${error.message}`);
+              }
+
+              result = {
+                success: true,
+                count: data.length,
+                appointments: data.map(apt => ({
+                  id: apt.id,
+                  date: apt.appointment_date,
+                  time: apt.appointment_time,
+                  reason: apt.reason,
+                  status: apt.status,
+                  doctor: apt.doctor_name || 'Dr. Sarah Johnson',
+                })),
+              };
+              break;
+            }
+
+            case 'reschedule_appointment': {
+              // PUBLIC TOOL: Reschedule appointment via n8n
+              logger.info('Rescheduling appointment', {
+                appointmentId: parsedArgs.appointment_id,
+                email: parsedArgs.email,
+                newDate: parsedArgs.new_date,
+                newTime: parsedArgs.new_time
+              });
+
+              const n8nWebhookBase = Deno.env.get('N8N_WEBHOOK_BASE');
+              if (!n8nWebhookBase) {
+                throw new Error('N8N_WEBHOOK_BASE environment variable not configured');
+              }
+
+              // Verify ownership before rescheduling
+              const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+              const { data: appointment, error: fetchError } = await supabaseClient
+                .from('appointments')
+                .select('*')
+                .eq('id', parsedArgs.appointment_id)
+                .eq('patient_email', parsedArgs.email)
+                .single();
+
+              if (fetchError || !appointment) {
+                logger.error('Appointment not found or unauthorized', { error: fetchError?.message });
+                throw new Error('Appointment not found or you do not have permission to modify it');
+              }
+
+              // Call n8n webhook for rescheduling
+              const n8nPayload = {
+                action: 'reschedule_appointment',
+                body: {
+                  action: 'reschedule_appointment',
+                  appointment_id: parsedArgs.appointment_id,
+                  patient_email: parsedArgs.email,
+                  patient_name: appointment.patient_name,
+                  new_date: parsedArgs.new_date,
+                  new_time: parsedArgs.new_time,
+                  reason: parsedArgs.reason || 'Patient requested reschedule',
+                  old_date: appointment.appointment_date,
+                  old_time: appointment.appointment_time,
+                }
+              };
+
+              const response = await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(n8nPayload),
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                logger.error('n8n reschedule webhook failed', {
+                  status: response.status,
+                  error: errorText
+                });
+                throw new Error(`Rescheduling failed: ${response.statusText}`);
+              }
+
+              result = {
+                success: true,
+                message: 'Appointment rescheduled successfully. Confirmation email sent.',
+                appointmentId: parsedArgs.appointment_id,
+                oldDate: appointment.appointment_date,
+                oldTime: appointment.appointment_time,
+                newDate: parsedArgs.new_date,
+                newTime: parsedArgs.new_time,
+              };
+              break;
+            }
+
+            case 'cancel_appointment': {
+              // PUBLIC TOOL: Cancel appointment via n8n
+              logger.info('Cancelling appointment', {
+                appointmentId: parsedArgs.appointment_id,
+                email: parsedArgs.email
+              });
+
+              const n8nWebhookBase = Deno.env.get('N8N_WEBHOOK_BASE');
+              if (!n8nWebhookBase) {
+                throw new Error('N8N_WEBHOOK_BASE environment variable not configured');
+              }
+
+              // Verify ownership before cancelling
+              const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+              const { data: appointment, error: fetchError } = await supabaseClient
+                .from('appointments')
+                .select('*')
+                .eq('id', parsedArgs.appointment_id)
+                .eq('patient_email', parsedArgs.email)
+                .single();
+
+              if (fetchError || !appointment) {
+                logger.error('Appointment not found or unauthorized', { error: fetchError?.message });
+                throw new Error('Appointment not found or you do not have permission to cancel it');
+              }
+
+              // Call n8n webhook for cancellation
+              const n8nPayload = {
+                action: 'cancel_appointment',
+                body: {
+                  action: 'cancel_appointment',
+                  appointment_id: parsedArgs.appointment_id,
+                  patient_email: parsedArgs.email,
+                  patient_name: appointment.patient_name,
+                  appointment_date: appointment.appointment_date,
+                  appointment_time: appointment.appointment_time,
+                  reason: parsedArgs.reason || 'Patient requested cancellation',
+                }
+              };
+
+              const response = await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(n8nPayload),
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                logger.error('n8n cancel webhook failed', {
+                  status: response.status,
+                  error: errorText
+                });
+                throw new Error(`Cancellation failed: ${response.statusText}`);
+              }
+
+              result = {
+                success: true,
+                message: 'Appointment cancelled successfully. Confirmation email sent.',
+                appointmentId: parsedArgs.appointment_id,
+                cancelledDate: appointment.appointment_date,
+                cancelledTime: appointment.appointment_time,
+              };
+              break;
+            }
+
             default:
               result = { error: `Unknown tool: ${name}` };
           }
@@ -693,7 +1115,71 @@ Serenity Hospital Team`;
         }
       }
 
-      // Return response with tool results
+      // For WhatsApp integration, call Groq again with tool results to get final response
+      if (mode === 'public' && toolResults.length > 0) {
+        logger.debug('Calling Groq again with tool results for final response');
+
+        // Build conversation with tool results
+        const messagesWithTools = [
+          ...messages,
+          message, // AI's message with tool calls
+          ...toolResults // Tool execution results
+        ];
+
+        const finalResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${groqApiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: messagesWithTools,
+            temperature,
+            max_tokens,
+          }),
+        });
+
+        if (finalResponse.ok) {
+          const finalData = await finalResponse.json();
+          const responseText = finalData.choices?.[0]?.message?.content || 'Appointment processed successfully.';
+
+          // Log WhatsApp conversation with tool execution
+          if (patient_phone) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            const userMessage = messages[messages.length - 1]?.content || '';
+            const executedTool = toolResults[0]?.role === 'tool' ? toolResults[0]?.name : undefined;
+            const executedToolResult = toolResults[0]?.content;
+
+            // Call logging function (async, don't block response)
+            logWhatsAppConversation(
+              supabase,
+              patient_phone,
+              userMessage,
+              message_type || 'text',
+              responseText,
+              executedTool,
+              executedToolResult
+            ).catch(err => logger.error('Logging failed', { error: err.message }));
+          }
+
+          return new Response(
+            JSON.stringify({
+              response: responseText,
+              success: true,
+              patient_phone,
+              message_type,
+              tool_executed: true
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      }
+
+      // For web chat (authenticated), return full response with tool results
       return new Response(
         JSON.stringify({
           ...groqData,
@@ -706,7 +1192,43 @@ Serenity Hospital Team`;
       );
     }
 
-    // No tool calls, return response as-is
+    // No tool calls - extract and return response
+    // For WhatsApp integration (mode=public), return simple text response
+    if (mode === 'public') {
+      const responseText = groqData.choices?.[0]?.message?.content || 'Sorry, I could not process your request.';
+
+      // Log WhatsApp conversation to database
+      if (patient_phone) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const userMessage = messages[messages.length - 1]?.content || '';
+
+        // Call logging function (async, don't block response)
+        logWhatsAppConversation(
+          supabase,
+          patient_phone,
+          userMessage,
+          message_type || 'text',
+          responseText,
+          undefined, // no tool executed
+          undefined  // no tool result
+        ).catch(err => logger.error('Logging failed', { error: err.message }));
+      }
+
+      return new Response(
+        JSON.stringify({
+          response: responseText,
+          success: true,
+          patient_phone,
+          message_type
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // For web chat (authenticated), return full Groq response
     return new Response(
       JSON.stringify(groqData),
       {

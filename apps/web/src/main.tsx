@@ -1,6 +1,9 @@
-// Build version: 2.0.2 - 2025-11-12T19:50:00Z - Fixed API key
+// Build version: 2.0.3 - 2025-11-12T20:30:00Z - Enhanced logging + guaranteed appointment booking fix
 import React from 'react';
-console.log('Serenity Care AI - Version 2.0.2 - Build 20251112-1950 - API Key Fixed');
+console.log('🚀 Serenity Care AI - Version 2.0.3 - Build 20251112-2030');
+console.log('✅ Enhanced logging enabled for appointment booking');
+console.log('✅ Comprehensive error handling added');
+console.log('📋 Check console for [ChatTools] logs during booking');
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

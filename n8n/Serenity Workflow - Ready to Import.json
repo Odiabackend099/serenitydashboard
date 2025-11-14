@@ -1,5 +1,5 @@
 {
-  "name": "Serenity Workflow - Ready to Import",
+  "name": "Serenity Webhook V2 - Fixed v2.0.3",
   "nodes": [
     {
       "parameters": {
@@ -136,6 +136,52 @@
               },
               "renameOutput": true,
               "outputKey": "book_appointment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "f6g7h8i9j0",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "reschedule_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reschedule_appointment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "g7h8i9j0k1",
+                    "leftValue": "={{ $json.action || $json.body.action || $json.body.body.action || '' }}",
+                    "rightValue": "cancel_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "cancel_appointment"
             }
           ]
         },
@@ -401,6 +447,10 @@
             {
               "fieldId": "reason",
               "fieldValue": "={{ $json.body.reason || $json.body.body.reason || $json.body.appointmentReason || $json.body.body.appointmentReason || 'General consultation' }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "confirmed"
             }
           ]
         }
@@ -479,6 +529,186 @@
       "position": [
         592,
         480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "appointments",
+        "filterType": "manual",
+        "matchFields": {
+          "fields": [
+            {
+              "fieldId": "id",
+              "fieldValue": "={{ $json.body.appointment_id || $json.body.body.appointment_id }}"
+            },
+            {
+              "fieldId": "patient_email",
+              "fieldValue": "={{ $json.body.patient_email || $json.body.body.patient_email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "appointment_date",
+              "fieldValue": "={{ $json.body.new_date || $json.body.body.new_date }}"
+            },
+            {
+              "fieldId": "appointment_time",
+              "fieldValue": "={{ $json.body.new_time || $json.body.body.new_time }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "rescheduled"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "=Rescheduled from {{ $json.body.old_date || $json.body.body.old_date }} at {{ $json.body.old_time || $json.body.body.old_time }}. Reason: {{ $json.body.reason || $json.body.body.reason || 'Patient requested' }}"
+            }
+          ]
+        }
+      },
+      "id": "f1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
+      "name": "Update Rescheduled Appointment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        1120
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "7ljtqTelzpKvg146",
+          "name": "srh"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.patient_email }}",
+        "subject": "Appointment Rescheduled - Serenity Hospital",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }\n    .content { padding: 20px; background-color: #f9f9f9; }\n    .appointment-box { background-color: white; padding: 15px; margin: 10px 0; border-left: 4px solid #4CAF50; }\n    .old-appointment { border-left-color: #ff9800; }\n    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>✅ Appointment Rescheduled</h1>\n    </div>\n    <div class=\"content\">\n      <p>Dear {{ $json.patient_name || 'Patient' }},</p>\n      <p>Your appointment has been successfully rescheduled.</p>\n      \n      <div class=\"appointment-box old-appointment\">\n        <h3>Previous Appointment:</h3>\n        <p><strong>Date:</strong> {{ $json.body.old_date || $json.body.body.old_date }}</p>\n        <p><strong>Time:</strong> {{ $json.body.old_time || $json.body.body.old_time }}</p>\n      </div>\n      \n      <div class=\"appointment-box\">\n        <h3>New Appointment:</h3>\n        <p><strong>Date:</strong> {{ $json.appointment_date }}</p>\n        <p><strong>Time:</strong> {{ $json.appointment_time }}</p>\n      </div>\n      \n      <p><strong>Reason for Reschedule:</strong> {{ $json.body.reason || $json.body.body.reason || 'Patient requested' }}</p>\n      \n      <p>Please arrive 10 minutes early for your appointment.</p>\n      <p>If you need to make any changes, please contact us as soon as possible.</p>\n    </div>\n    <div class=\"footer\">\n      <p>Serenity Royale Hospital<br>\n      Your health, our priority</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "appendAttribution": false
+        }
+      },
+      "id": "a2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d",
+      "name": "Send Reschedule Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        1088
+      ],
+      "webhookId": "r1e2s3c4h5e6d7u8l9e0a1b2c3d4e5f6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jX0WB96gvVFRE5qW",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, action: 'reschedule_appointment', message: 'Appointment rescheduled successfully', appointment: { id: $json.body.appointment_id || $json.body.body.appointment_id, patient_email: $json.patient_email, old_date: $json.body.old_date || $json.body.body.old_date, old_time: $json.body.old_time || $json.body.body.old_time, new_date: $json.appointment_date, new_time: $json.appointment_time, status: 'rescheduled' }, timestamp: new Date().toISOString() } }}",
+        "options": {}
+      },
+      "id": "b3c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e",
+      "name": "Respond Reschedule Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        224,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "appointments",
+        "filterType": "manual",
+        "matchFields": {
+          "fields": [
+            {
+              "fieldId": "id",
+              "fieldValue": "={{ $json.body.appointment_id || $json.body.body.appointment_id }}"
+            },
+            {
+              "fieldId": "patient_email",
+              "fieldValue": "={{ $json.body.patient_email || $json.body.body.patient_email }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "cancelled"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "=Cancelled by patient. Reason: {{ $json.body.reason || $json.body.body.reason || 'Not specified' }}"
+            }
+          ]
+        }
+      },
+      "id": "c4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f",
+      "name": "Update Cancelled Appointment",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        1360
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "7ljtqTelzpKvg146",
+          "name": "srh"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.patient_email }}",
+        "subject": "Appointment Cancelled - Serenity Hospital",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background-color: #f44336; color: white; padding: 20px; text-align: center; }\n    .content { padding: 20px; background-color: #f9f9f9; }\n    .appointment-box { background-color: white; padding: 15px; margin: 10px 0; border-left: 4px solid #f44336; }\n    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }\n    .action-button { display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>❌ Appointment Cancelled</h1>\n    </div>\n    <div class=\"content\">\n      <p>Dear {{ $json.patient_name || 'Patient' }},</p>\n      <p>Your appointment has been cancelled as requested.</p>\n      \n      <div class=\"appointment-box\">\n        <h3>Cancelled Appointment Details:</h3>\n        <p><strong>Date:</strong> {{ $json.appointment_date }}</p>\n        <p><strong>Time:</strong> {{ $json.appointment_time }}</p>\n        <p><strong>Cancellation Reason:</strong> {{ $json.body.reason || $json.body.body.reason || 'Not specified' }}</p>\n      </div>\n      \n      <p>We understand that plans can change. If you would like to reschedule, please contact us or book a new appointment at your convenience.</p>\n      \n      <p>We hope to see you again soon!</p>\n    </div>\n    <div class=\"footer\">\n      <p>Serenity Royale Hospital<br>\n      Your health, our priority</p>\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "appendAttribution": false
+        }
+      },
+      "id": "d5e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a",
+      "name": "Send Cancellation Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        1328
+      ],
+      "webhookId": "c1a2n3c4e5l6a7t8i9o0n1e2m3a4i5l6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "jX0WB96gvVFRE5qW",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, action: 'cancel_appointment', message: 'Appointment cancelled successfully', appointment: { id: $json.body.appointment_id || $json.body.body.appointment_id, patient_email: $json.patient_email, date: $json.appointment_date, time: $json.appointment_time, status: 'cancelled', reason: $json.body.reason || $json.body.body.reason || 'Not specified' }, timestamp: new Date().toISOString() } }}",
+        "options": {}
+      },
+      "id": "e6f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a0b",
+      "name": "Respond Cancel Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        224,
+        1360
       ]
     }
   ],
@@ -587,6 +817,20 @@
         [
           {
             "node": "Create Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Rescheduled Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Cancelled Appointment",
             "type": "main",
             "index": 0
           }
@@ -709,6 +953,50 @@
         [
           {
             "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Rescheduled Appointment": {
+      "main": [
+        [
+          {
+            "node": "Send Reschedule Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reschedule Email": {
+      "main": [
+        [
+          {
+            "node": "Respond Reschedule Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Cancelled Appointment": {
+      "main": [
+        [
+          {
+            "node": "Send Cancellation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Cancellation Email": {
+      "main": [
+        [
+          {
+            "node": "Respond Cancel Success",
             "type": "main",
             "index": 0
           }

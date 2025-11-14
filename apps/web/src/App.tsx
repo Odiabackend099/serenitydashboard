@@ -1,5 +1,5 @@
 import { Route, Routes, NavLink } from 'react-router-dom';
-import { MessageSquare, Calendar, BarChart3, Bot, Settings as SettingsIcon, Menu, X } from 'lucide-react';
+import { MessageSquare, Calendar, BarChart3, Bot, Settings as SettingsIcon, Menu, X, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import Conversations from './pages/Conversations';
 import CalendarPage from './pages/Calendar';
@@ -11,6 +11,8 @@ import ChatWidget from './components/ChatWidget';
 import ProtectedRoute from './components/ProtectedRoute';
 import ThemeToggle from './components/ThemeToggle';
 import { useAuth } from './contexts/AuthContext';
+import { WhatsAppConversations } from './components/WhatsAppConversations';
+import { WhatsAppAnalytics } from './components/WhatsAppAnalytics';
 
 function Dashboard() {
   const { profile, signOut } = useAuth();
@@ -107,6 +109,40 @@ function Dashboard() {
             <Bot className="w-5 h-5" />
             <span>Agent Config</span>
           </NavLink>
+
+          {/* WhatsApp Section */}
+          <div className="pt-2 mt-2 border-t border-gray-700">
+            <p className="text-xs text-gray-400 px-3 mb-2">WhatsApp</p>
+            <NavLink
+              to="/whatsapp/conversations"
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                  isActive
+                    ? 'bg-healthcare-primary text-white font-medium shadow-lg'
+                    : 'text-gray-300 hover:bg-gray-800 dark:hover:bg-gray-700'
+                }`
+              }
+            >
+              <MessageCircle className="w-5 h-5" />
+              <span>Conversations</span>
+            </NavLink>
+            <NavLink
+              to="/whatsapp/analytics"
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                  isActive
+                    ? 'bg-healthcare-primary text-white font-medium shadow-lg'
+                    : 'text-gray-300 hover:bg-gray-800 dark:hover:bg-gray-700'
+                }`
+              }
+            >
+              <BarChart3 className="w-5 h-5" />
+              <span>Analytics</span>
+            </NavLink>
+          </div>
+
           <NavLink
             to="/settings"
             onClick={() => setSidebarOpen(false)}
@@ -152,6 +188,8 @@ function Dashboard() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/agent" element={<AgentConfig />} />
+          <Route path="/whatsapp/conversations" element={<WhatsAppConversations />} />
+          <Route path="/whatsapp/analytics" element={<WhatsAppAnalytics />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

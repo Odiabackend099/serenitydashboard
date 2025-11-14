@@ -1,0 +1,41 @@
+================================================================================
+  IMPORT N8N WORKFLOW NOW - 2 MINUTE GUIDE
+================================================================================
+
+FILE TO IMPORT:
+  /Users/odiadev/Desktop/serenity dasboard/n8n/Serenity Workflow - Ready to Import.json
+
+STEPS:
+  1. Go to: https://cwai97.app.n8n.cloud/workflows
+
+  2. Deactivate old workflows (if any):
+     - Find any workflow with path "/serenity-webhook-v2"
+     - Toggle OFF
+
+  3. Import new workflow:
+     - Click "+" button (top right)
+     - Select "Import from file"
+     - Choose: n8n/Serenity Workflow - Ready to Import.json
+     - Click "Import"
+
+  4. Activate:
+     - Click "Save"
+     - Toggle "Active" to ON
+
+TEST IT:
+  cd "/Users/odiadev/Desktop/serenity dasboard"
+  ./test-n8n-direct.sh
+
+EXPECTED RESULT:
+  ✅ SUCCESS!
+  Response Code: 200
+
+WHAT'S FIXED:
+  ✅ Added 'status' field (set to 'scheduled')
+  ✅ Removed 'source' field (doesn't exist in DB)
+  ✅ All other fields already had correct mappings
+
+DONE!
+  After importing and activating, appointment booking will work from chat widget!
+
+================================================================================

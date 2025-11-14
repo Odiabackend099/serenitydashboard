@@ -1,0 +1,69 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run weekly on Sundays at midnight
+    - cron: '0 0 * * 0'
+
+jobs:
+  security:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run NPM Audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Checking for hardcoded API keys..."
+          ! git grep -E "(gsk_|sk-|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9)" -- '*.ts' '*.tsx' '*.js' '*.jsx' || exit 1
+          echo "✅ No hardcoded secrets found"
+
+      - name: Check for console.log in production code
+        run: |
+          echo "Checking for sensitive console.log statements..."
+          # Allow productionLogger usage, but flag regular console.log in production files
+          git grep -n "console\\.log" -- apps/web/src/**/*.ts apps/web/src/**/*.tsx | grep -v "productionLogger" | grep -v "logger\\.debug" || echo "✅ No unsafe console.log found"
+        continue-on-error: true
+
+      - name: Verify .env files are gitignored
+        run: |
+          echo "Verifying .env files are gitignored..."
+          git check-ignore .env .env.local apps/web/.env.local || exit 1
+          echo "✅ .env files properly ignored"
+
+      - name: TypeScript type check
+        run: npm run type-check || npm run build
+        continue-on-error: true
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v3
+        with:
+          fail-on-severity: moderate

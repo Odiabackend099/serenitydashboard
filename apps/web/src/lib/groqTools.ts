@@ -12,6 +12,8 @@
 
 import { supabase } from './supabase';
 import { logger } from './logger';
+import { logger as productionLogger } from './productionLogger';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 // Input validation functions
 function validateEmail(email: string): boolean {
@@ -20,14 +22,22 @@ function validateEmail(email: string): boolean {
 }
 
 function validatePhone(phone: string): boolean {
-  // Accept international format with +, or US format with/without country code
-  const phoneRegex = /^(\+?1[-.\s]?)?(\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4})$/;
-  return phoneRegex.test(phone.replace(/\s/g, ''));
+  // Accept international format (+234XXXXXXXXXX) or US/general formats
+  const cleanPhone = phone.replace(/[\s\-\(\)\.]/g, '');
+  // Must have at least 10 digits, optionally starting with +
+  const phoneRegex = /^\+?[1-9]\d{9,14}$/;
+  return phoneRegex.test(cleanPhone);
 }
 
 function sanitizeInput(input: string): string {
   if (typeof input !== 'string') return '';
-  return input.replace(/[<>]/g, '').trim();
+  // Remove potential XSS vectors and trim
+  return input
+    .replace(/[<>'"]/g, '')  // Remove HTML/script injection characters
+    .replace(/javascript:/gi, '')  // Remove javascript: protocol
+    .replace(/on\w+=/gi, '')  // Remove event handlers like onclick=
+    .trim()
+    .substring(0, 500);  // Limit length to prevent DoS
 }
 
 function validateAppointmentDate(dateString: string): boolean {
@@ -105,7 +115,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'trigger_automation',
-      description: 'Trigger n8n workflow automation (requires confirmation for sensitive actions)',
+      description: 'Trigger n8n workflow automation. **CRITICAL**: For appointment booking - NEVER call immediately. FIRST collect ALL required info from admin: patient name, email, phone, date, time, reason. ONLY call after ALL fields collected. For other automations, confirm action details before calling.',
       parameters: {
         type: 'object',
         properties: {
@@ -128,7 +138,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'create_calendar_event',
-      description: 'Create a Google Calendar event for an appointment',
+      description: 'Create a Google Calendar event for an appointment. **CRITICAL**: NEVER call immediately. FIRST collect ALL required info: appointment_id, patient details, date, time, reason. ONLY call after ALL fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -169,7 +179,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'reschedule_calendar_event',
-      description: 'Reschedule an existing calendar event to a new date and time',
+      description: 'Reschedule an existing calendar event to a new date and time. **CRITICAL**: NEVER call immediately. FIRST collect ALL required info: appointment_id, calendar event_id, new date, new time. ONLY call after ALL 4 fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -198,7 +208,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'cancel_calendar_event',
-      description: 'Cancel and delete a calendar event',
+      description: 'Cancel and delete a calendar event. **CRITICAL**: NEVER call immediately. FIRST collect appointment_id and calendar event_id. Confirm cancellation with user before calling.',
       parameters: {
         type: 'object',
         properties: {
@@ -244,7 +254,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'schedule_followup_email',
-      description: 'Schedule a follow-up email to be sent to a patient at a specific time',
+      description: 'Schedule a follow-up email to be sent to a patient at a specific time. **CRITICAL**: NEVER call immediately. FIRST collect ALL required info: patient_email, patient_name, followup_type, scheduled_for. ONLY call after ALL 4 fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -372,7 +382,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'send_message',
-      description: 'Send a message in an existing conversation thread. Use for follow-ups, reminders, or replies.',
+      description: 'Send a message in an existing conversation thread. Use for follow-ups, reminders, or replies. **CRITICAL**: NEVER call immediately. FIRST collect ALL required info: conversation_id, message text, channel. ONLY call after ALL 3 fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -424,7 +434,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'assign_to_staff',
-      description: 'Assign a conversation to a staff member. Use for escalation or routing.',
+      description: 'Assign a conversation to a staff member. Use for escalation or routing. **CRITICAL**: NEVER call immediately. FIRST collect conversation_id and staff_email. ONLY call after both fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -481,7 +491,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'create_appointment_enhanced',
-      description: 'Create appointment with full details including doctor assignment, type, and automatic calendar sync.',
+      description: 'Create appointment with full details including doctor assignment, type, and automatic calendar sync. **CRITICAL**: NEVER call immediately. FIRST collect ALL required info: patient_name, patient_phone, appointment_date, appointment_time. ONLY call after ALL 4 fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -571,7 +581,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'send_whatsapp_message',
-      description: 'Send a WhatsApp message directly to a patient. Use for proactive outreach, reminders, or updates.',
+      description: 'Send a WhatsApp message directly to a patient. Use for proactive outreach, reminders, or updates. **CRITICAL**: NEVER call immediately. FIRST collect phone_number and message text. ONLY call after both fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -600,7 +610,7 @@ export const adminTools = [
     type: 'function' as const,
     function: {
       name: 'send_sms_reminder',
-      description: 'Send SMS reminder for appointment or follow-up. HIPAA-compliant - minimal details only.',
+      description: 'Send SMS reminder for appointment or follow-up. HIPAA-compliant - minimal details only. **CRITICAL**: NEVER call immediately. FIRST collect phone_number, appointment_id, reminder_type. ONLY call after ALL 3 fields collected.',
       parameters: {
         type: 'object',
         properties: {
@@ -651,6 +661,55 @@ export const adminTools = [
       },
     },
   },
+  // WhatsApp Admin Tools (send_whatsapp_message defined earlier at line 573)
+  {
+    type: 'function' as const,
+    function: {
+      name: 'send_appointment_whatsapp',
+      description: 'Send appointment confirmation, reschedule, or cancellation notification via WhatsApp',
+      parameters: {
+        type: 'object',
+        properties: {
+          appointment_id: {
+            type: 'string',
+            description: 'UUID of the appointment',
+          },
+          action: {
+            type: 'string',
+            enum: ['booking', 'reschedule', 'cancellation'],
+            description: 'Type of notification to send',
+          },
+        },
+        required: ['appointment_id', 'action'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_whatsapp_summary',
+      description: 'Get WhatsApp conversation analytics and summary for a time period',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'string',
+            enum: ['today', 'yesterday', 'this_week', 'this_month', 'custom'],
+            description: 'Time period for the summary',
+          },
+          start_date: {
+            type: 'string',
+            description: 'Start date for custom period (YYYY-MM-DD format)',
+          },
+          end_date: {
+            type: 'string',
+            description: 'End date for custom period (YYYY-MM-DD format)',
+          },
+        },
+        required: ['period'],
+      },
+    },
+  },
 ];
 
 // PUBLIC TOOLS - Safe tools for public users (appointment booking with email confirmation)
@@ -659,7 +718,7 @@ export const publicTools = [
     type: 'function' as const,
     function: {
       name: 'book_appointment_with_confirmation',
-      description: 'Book an appointment and send confirmation email. **CRITICAL**: DO NOT call this tool until you have collected ALL required information from the user: name, email, phone, date, time, and reason. If any information is missing, ASK the user for it first before calling this tool.',
+      description: 'Book an appointment and send confirmation email. **CRITICAL USAGE RULES**: 1) NEVER call this immediately when user says "book appointment". 2) FIRST ask for ALL 6 required fields: name, email, phone, date, time, reason. 3) ONLY call this tool AFTER user has provided ALL information. 4) If ANY field is missing, ASK for it - do NOT call this tool. This tool will FAIL if any required field is missing.',
       parameters: {
         type: 'object',
         properties: {
@@ -692,6 +751,111 @@ export const publicTools = [
       },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_my_appointments',
+      description: 'Get patient\'s appointments by email. Use this when a patient asks "show my appointments" or "what appointments do I have".',
+      parameters: {
+        type: 'object',
+        properties: {
+          email: {
+            type: 'string',
+            description: 'Patient email address to lookup appointments',
+          },
+          status: {
+            type: 'string',
+            enum: ['all', 'upcoming', 'past', 'confirmed', 'pending', 'cancelled'],
+            description: 'Filter appointments by status. Default is "upcoming"',
+          },
+        },
+        required: ['email'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'reschedule_appointment',
+      description: 'Reschedule an existing appointment to a new date and time. **CRITICAL**: NEVER call immediately. FIRST collect ALL required info: appointment_id, email, new_date, new_time. ONLY call after ALL 4 fields collected.',
+      parameters: {
+        type: 'object',
+        properties: {
+          appointment_id: {
+            type: 'string',
+            description: 'The appointment ID to reschedule',
+          },
+          email: {
+            type: 'string',
+            description: 'Patient email for verification',
+          },
+          new_date: {
+            type: 'string',
+            description: 'New appointment date in YYYY-MM-DD format',
+          },
+          new_time: {
+            type: 'string',
+            description: 'New appointment time in 12-hour format with AM/PM',
+          },
+          reason: {
+            type: 'string',
+            description: 'Reason for rescheduling (optional)',
+          },
+        },
+        required: ['appointment_id', 'email', 'new_date', 'new_time'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'cancel_appointment',
+      description: 'Cancel an existing appointment. **CRITICAL**: NEVER call immediately. FIRST collect appointment_id and email for verification. Confirm cancellation with user before calling.',
+      parameters: {
+        type: 'object',
+        properties: {
+          appointment_id: {
+            type: 'string',
+            description: 'The appointment ID to cancel',
+          },
+          email: {
+            type: 'string',
+            description: 'Patient email for verification',
+          },
+          reason: {
+            type: 'string',
+            description: 'Reason for cancellation (optional)',
+          },
+        },
+        required: ['appointment_id', 'email'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'check_availability',
+      description: 'Check if a specific date and time slot is available for booking',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: {
+            type: 'string',
+            description: 'Date to check in YYYY-MM-DD format',
+          },
+          time: {
+            type: 'string',
+            description: 'Time to check in 12-hour format with AM/PM',
+          },
+          provider: {
+            type: 'string',
+            description: 'Provider name (optional). Default is "Dr. Sarah Johnson"',
+          },
+        },
+        required: ['date', 'time'],
+      },
+    },
+  },
 ];
 
 // Legacy export for backward compatibility
@@ -712,7 +876,7 @@ export async function getStats(metric: string): Promise<any> {
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/assistant-call`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}/functions/v1/assistant-call`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -740,7 +904,7 @@ export async function triggerAutomation(action: string, payload: any): Promise<a
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/assistant-call`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}/functions/v1/assistant-call`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -770,6 +934,27 @@ export async function bookAppointmentWithConfirmation(
   time: string,
   reason?: string
 ): Promise<any> {
+  // Validate inputs before processing
+  if (!name || name.trim().length === 0) {
+    throw new Error('Patient name is required');
+  }
+
+  if (!validateEmail(email)) {
+    throw new Error('Please provide a valid email address');
+  }
+
+  if (!validatePhone(phone)) {
+    throw new Error('Please provide a valid phone number');
+  }
+
+  if (!validateAppointmentDate(date)) {
+    throw new Error('Please provide a valid future date for the appointment');
+  }
+
+  // Sanitize inputs
+  const sanitizedName = sanitizeInput(name);
+  const sanitizedReason = reason ? sanitizeInput(reason) : 'General consultation';
+
   // Call n8n webhook directly for appointment booking + email confirmation
   const n8nWebhookBase = import.meta.env.VITE_N8N_WEBHOOK_BASE;
   if (!n8nWebhookBase) {
@@ -777,43 +962,43 @@ export async function bookAppointmentWithConfirmation(
   }
 
   // Use the serenity-webhook-v2 endpoint (matches SIMPLIFIED_WORKING_WORKFLOW.json)
-  const response = await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
+  const response = await fetchWithTimeout(`${n8nWebhookBase}/serenity-webhook-v2`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       // Primary fields for n8n workflow
-      message: `Appointment booking request from ${name}`,
+      message: `Appointment booking request from ${sanitizedName}`,
       userId: email,
       channel: 'web',
       intent: 'appointment',
 
       // Patient contact (both formats for compatibility)
-      patientName: name,
+      patientName: sanitizedName,
       patientEmail: email,
       patientPhone: phone,
-      patient_name: name,
+      patient_name: sanitizedName,
       patient_email: email,
       patient_phone: phone,
 
       // Appointment details (both formats)
       appointmentDate: date,
       appointmentTime: time,
-      appointmentReason: reason || 'General consultation',
+      appointmentReason: sanitizedReason,
       appointmentType: 'consultation',
       appointment_date: date,
       appointment_time: time,
-      appointment_reason: reason || 'General consultation',
+      appointment_reason: sanitizedReason,
       appointment_type: 'consultation',
 
       // Legacy fields for backward compatibility
-      name,
+      name: sanitizedName,
       email,
       phone,
       date,
       time,
-      reason: reason || 'General consultation',
+      reason: sanitizedReason,
 
       // Metadata
       source: 'groq_text_chat',
@@ -848,7 +1033,7 @@ export async function createCalendarEvent(args: {
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -880,7 +1065,7 @@ export async function rescheduleCalendarEvent(args: {
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -910,7 +1095,7 @@ export async function cancelCalendarEvent(args: {
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+  const response = await fetchWithTimeout(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1163,7 +1348,7 @@ export async function sendMessage(args: {
   const n8nWebhookBase = import.meta.env.VITE_N8N_WEBHOOK_BASE;
   if (n8nWebhookBase && conversation) {
     try {
-      await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
+      await fetchWithTimeout(`${n8nWebhookBase}/serenity-webhook-v2`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1323,18 +1508,39 @@ export async function createAppointmentEnhanced(args: {
     create_calendar_event = true,
   } = args;
 
+  // Validate inputs
+  if (!patient_name || patient_name.trim().length === 0) {
+    throw new Error('Patient name is required');
+  }
+
+  if (patient_email && !validateEmail(patient_email)) {
+    throw new Error('Invalid email address provided');
+  }
+
+  if (!validatePhone(patient_phone)) {
+    throw new Error('Please provide a valid phone number');
+  }
+
+  if (!validateAppointmentDate(appointment_date)) {
+    throw new Error('Please provide a valid future date');
+  }
+
+  // Sanitize inputs
+  const sanitizedName = sanitizeInput(patient_name);
+  const sanitizedReason = sanitizeInput(reason);
+
   // Create appointment in database
   const { data: appointment, error } = await supabase
     .from('appointments')
     .insert({
-      patient_name,
+      patient_name: sanitizedName,
       patient_email,
       patient_phone,
       appointment_date,
       appointment_time,
       doctor_name,
       appointment_type,
-      reason,
+      reason: sanitizedReason,
       status: 'confirmed',
     })
     .select()
@@ -1480,7 +1686,7 @@ export async function sendWhatsappMessage(args: {
     throw new Error('N8N webhook not configured');
   }
 
-  const response = await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
+  const response = await fetchWithTimeout(`${n8nWebhookBase}/serenity-webhook-v2`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1549,7 +1755,7 @@ export async function sendSmsReminder(args: {
     throw new Error('N8N webhook not configured');
   }
 
-  const response = await fetch(`${n8nWebhookBase}/serenity-webhook-v2`, {
+  const response = await fetchWithTimeout(`${n8nWebhookBase}/serenity-webhook-v2`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1915,6 +2121,30 @@ export async function executeTool(toolCall: any): Promise<string> {
           data: patientSummary
         });
 
+      // WhatsApp Admin Tools
+      case 'send_whatsapp_message':
+        const whatsappMsg = await sendWhatsAppMessage(parsedArgs.phone, parsedArgs.message);
+        return JSON.stringify({
+          success: true,
+          message: 'WhatsApp message sent successfully!',
+          data: whatsappMsg
+        });
+
+      case 'send_appointment_whatsapp':
+        const whatsappAppt = await sendAppointmentWhatsApp(parsedArgs.appointment_id, parsedArgs.action);
+        return JSON.stringify({
+          success: true,
+          message: `${parsedArgs.action} notification sent via WhatsApp!`,
+          data: whatsappAppt
+        });
+
+      case 'get_whatsapp_summary':
+        const whatsappSummary = await getWhatsAppSummary(parsedArgs.period, parsedArgs.start_date, parsedArgs.end_date);
+        return JSON.stringify({
+          success: true,
+          data: whatsappSummary
+        });
+
       default:
         return JSON.stringify({ success: false, error: `Unknown tool: ${name}` });
     }
@@ -1992,11 +2222,13 @@ If asked about patient data you don't have access to, politely explain you can o
   // Get auth token for Edge Function
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token;
-  
+
   // Log authentication status for debugging
   if (!authToken) {
+    console.log('[ChatTools] No authentication token - using anonymous access');
     logger.warn('No authentication token found - using anonymous access');
   } else {
+    console.log('[ChatTools] Using authenticated session');
     logger.log('Using authenticated session for groq-chat request');
   }
 
@@ -2005,35 +2237,53 @@ If asked about patient data you don't have access to, politely explain you can o
 
     // Call Groq via Edge Function
     const edgeFunctionUrl = `${supabaseUrl}/functions/v1/groq-chat`;
-    
+
+    productionLogger.debug('[ChatTools] Calling Groq Edge Function:', {
+      url: edgeFunctionUrl,
+      iteration: iterations,
+      messageCount: fullMessages.length,
+      hasTools: toolsToUse.length > 0,
+      hasAuth: !!authToken
+    });
+
     // Prepare headers with authentication
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
     };
-    
+
     // Only add Authorization header if we have a valid token
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
-    
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        messages: fullMessages,
-        model: 'llama-3.1-8b-instant',
-        tools: toolsToUse,
+
+    const requestBody = {
+      messages: fullMessages,
+      model: 'llama-3.1-8b-instant',
+      tools: toolsToUse,
       tool_choice: toolsToUse.length > 0 ? 'auto' : 'none',
       temperature: 0.7,
       max_tokens: 1000,
-      }),
+    };
+
+    productionLogger.debug('[ChatTools] Request body prepared', {
+      messageCount: requestBody.messages?.length,
+      toolCount: requestBody.tools?.length
     });
-    
+
+    const response = await fetchWithTimeout(edgeFunctionUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+
+    productionLogger.debug('[ChatTools] Response received', { status: response.status });
+
     if (!response.ok) {
       const error = await response.text();
-      logger.error('Groq Edge Function error:', error);
-      
+      productionLogger.error('[ChatTools] Groq Edge Function error', { status: response.status, error: error.substring(0, 200) });
+      logger.error('Groq Edge Function error:', error.substring(0, 200));
+
       // Provide user-friendly error messages based on status codes
       if (response.status === 401) {
         throw new Error('Authentication failed. Please log in again or contact support if the issue persists.');
@@ -2049,24 +2299,43 @@ If asked about patient data you don't have access to, politely explain you can o
     }
 
     const completion = await validateJsonResponse(response);
+    productionLogger.debug('[ChatTools] Completion received', {
+      hasChoices: !!completion.choices,
+      toolResultsCount: completion.tool_results?.length || 0
+    });
 
     // Handle tool results from Edge Function
     if (completion.tool_results && completion.tool_results.length > 0) {
       const toolResults = completion.tool_results;
+      productionLogger.debug('[ChatTools] Processing tool results', { count: toolResults.length });
 
       // Validate tool execution success and check for user denials
       let allToolsSucceeded = true;
       for (const toolResult of toolResults) {
         const content = JSON.parse(toolResult.content);
+        productionLogger.debug('[ChatTools] Tool result processed', {
+          name: toolResult.name,
+          success: content.success
+        });
+
+        // Check if tool execution succeeded
+        if (content.success === true) {
+          productionLogger.debug(`[ChatTools] Tool executed successfully`, { tool: toolResult.name });
+        }
 
         // Check if tool execution failed
         if (content.error) {
+          productionLogger.error(`[ChatTools] Tool failed`, {
+            tool: toolResult.name,
+            error: content.error
+          });
           logger.error(`Tool ${toolResult.name} failed:`, content.error);
           allToolsSucceeded = false;
         }
 
         // Check if tool was denied by user (special error code)
         if (content.error && content.error.includes('User denied')) {
+          productionLogger.info(`[ChatTools] Tool denied by user`, { tool: toolResult.name });
           logger.log(`Tool ${toolResult.name} denied by user`);
           return "I understand you don't want to proceed with that action. Is there anything else I can help you with?";
         }
@@ -2080,6 +2349,7 @@ If asked about patient data you don't have access to, politely explain you can o
           assistantMessage,
           ...toolResults,
         ];
+        console.log('[ChatTools] Added tool results to conversation, continuing...');
       }
 
       // Continue loop to get final response
@@ -2125,4 +2395,151 @@ If asked about patient data you don't have access to, politely explain you can o
   }
   
   return 'I apologize, I reached the maximum number of tool calls. Please try rephrasing your request.';
+}
+
+// ============================================
+// WHATSAPP ADMIN TOOL IMPLEMENTATIONS
+// ============================================
+
+/**
+ * Send a custom WhatsApp message to a patient
+ */
+async function sendWhatsAppMessage(phone: string, message: string): Promise<any> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetchWithTimeout(`${getSupabaseUrl()}/functions/v1/whatsapp-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        action: 'send_message',
+        phone,
+        message
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send WhatsApp message');
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    logger.error('Failed to send WhatsApp message', { error: error.message });
+    throw error;
+  }
+}
+
+/**
+ * Send appointment confirmation/reschedule/cancellation via WhatsApp
+ */
+async function sendAppointmentWhatsApp(appointmentId: string, action: 'booking' | 'reschedule' | 'cancellation'): Promise<any> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('Authentication required');
+    }
+
+    const actionMap = {
+      booking: 'send_booking_confirmation',
+      reschedule: 'send_reschedule',
+      cancellation: 'send_cancellation'
+    };
+
+    const response = await fetchWithTimeout(`${getSupabaseUrl()}/functions/v1/whatsapp-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        action: actionMap[action],
+        appointment_id: appointmentId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to send WhatsApp appointment notification');
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    logger.error('Failed to send appointment WhatsApp', { error: error.message });
+    throw error;
+  }
+}
+
+/**
+ * Get WhatsApp conversation summary and analytics
+ */
+async function getWhatsAppSummary(period: string, startDate?: string, endDate?: string): Promise<any> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('Authentication required');
+    }
+
+    // Calculate date range based on period
+    const today = new Date();
+    let start, end;
+
+    switch (period) {
+      case 'today':
+        start = end = today.toISOString().split('T')[0];
+        break;
+      case 'yesterday':
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        start = end = yesterday.toISOString().split('T')[0];
+        break;
+      case 'this_week':
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay());
+        start = weekStart.toISOString().split('T')[0];
+        end = today.toISOString().split('T')[0];
+        break;
+      case 'this_month':
+        start = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+        end = today.toISOString().split('T')[0];
+        break;
+      case 'custom':
+        if (!startDate || !endDate) {
+          throw new Error('Start and end dates required for custom period');
+        }
+        start = startDate;
+        end = endDate;
+        break;
+      default:
+        start = end = today.toISOString().split('T')[0];
+    }
+
+    const response = await fetchWithTimeout(`${getSupabaseUrl()}/functions/v1/whatsapp-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        action: 'get_summary',
+        date_range: { start, end }
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch WhatsApp summary');
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    logger.error('Failed to get WhatsApp summary', { error: error.message });
+    throw error;
+  }
 }
